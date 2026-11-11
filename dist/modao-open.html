@@ -93,6 +93,34 @@ body {
 .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
 .zoom-label { font-size: 12px; color: var(--text-dim); width: 44px; text-align: center; }
 
+.tb-group { display: flex; align-items: center; gap: 2px; }
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.icon-btn:hover { background: var(--bg-panel-2); color: var(--text); border-color: var(--line); }
+.icon-btn.on { background: #17304f; color: #cfe2ff; border-color: var(--accent); }
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* ---------- body ---------- */
 .body { flex: 1; display: flex; min-height: 0; }
 
@@ -151,6 +179,7 @@ body {
 }
 .page-item:hover { background: var(--bg-panel-2); color: var(--text); }
 .page-item.active { background: #17304f; color: #cfe2ff; }
+.page-item .p-icon { display: flex; align-items: center; opacity: .7; flex: 0 0 auto; }
 .page-item .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-item .del { opacity: 0; font-size: 11px; }
 .page-item:hover .del { opacity: .7; }
@@ -190,10 +219,18 @@ body {
 .layer-item:hover { background: var(--bg-panel-2); color: var(--text); }
 .layer-item.active { background: #17304f; color: #cfe2ff; }
 .layer-item.is-hidden { opacity: .45; }
-.layer-item .l-icon { width: 14px; text-align: center; opacity: .8; font-size: 11px; flex: 0 0 14px; }
+.layer-item .l-icon {
+  width: 14px;
+  flex: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: .85;
+}
 .layer-item .l-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layer-item .l-btn {
-  width: 18px; height: 18px; line-height: 14px; font-size: 10px;
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
   border: none; background: transparent; color: inherit; opacity: .55; padding: 0;
 }
 .layer-item .l-btn:hover { opacity: 1; }
@@ -288,6 +325,27 @@ body {
   margin: 10px 0 6px;
   letter-spacing: .03em;
 }
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 0;
+}
+.group-head:hover { color: var(--text); }
+.group-head .caret {
+  width: 10px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: .75;
+}
+.group-head .caret svg { transition: transform .12s ease; transform: rotate(90deg); }
+.group.collapsed .group-head .caret svg { transform: rotate(0deg); }
+.group.collapsed { margin-bottom: 4px; }
 .row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
 .row > * { min-width: 0; }
 
@@ -497,19 +555,41 @@ textarea.full {
     </div>
 
     <div class="toolbar" id="toolbar">
-      <button class="tb" data-act="undo" title="撤销 Ctrl+Z">撤销</button>
-      <button class="tb" data-act="redo" title="重做 Ctrl+Shift+Z">重做</button>
+      <div class="tb-group">
+        <button class="icon-btn" data-act="undo" title="撤销 (Ctrl+Z)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a5 5 0 0 1 0 10h-3"/></svg>
+        </button>
+        <button class="icon-btn" data-act="redo" title="重做 (Ctrl+Shift+Z)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9h-9a5 5 0 0 0 0 10h3"/></svg>
+        </button>
+      </div>
       <span class="sep"></span>
       <select id="deviceSelect" class="tb-select" title="画布设备"></select>
       <span class="sep"></span>
-      <button class="tb" data-act="zoom-out" title="缩小">−</button>
-      <span id="zoomLabel" class="zoom-label">100%</span>
-      <button class="tb" data-act="zoom-in" title="放大">＋</button>
-      <button class="tb" data-act="zoom-fit" title="适应窗口">适应</button>
+      <div class="tb-group">
+        <button class="icon-btn" data-act="zoom-out" title="缩小">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6M8 11h6"/></svg>
+        </button>
+        <span id="zoomLabel" class="zoom-label">100%</span>
+        <button class="icon-btn" data-act="zoom-in" title="放大">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6M8 11h6M11 8v6"/></svg>
+        </button>
+        <button class="icon-btn" data-act="zoom-fit" title="适应窗口">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
       <span class="sep"></span>
-      <button class="tb" data-act="toggle-grid" title="网格/参考线" id="gridBtn">参考线</button>
-      <button class="tb" data-act="toggle-links" title="显示交互连线" id="linkBtn">连线</button>
-      <button class="tb" data-act="inspect" title="标注模式：点元素看规格、导切图" id="inspectBtn">标注</button>
+      <div class="tb-group">
+        <button class="icon-btn" data-act="toggle-grid" title="网格参考线" id="gridBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17"/></svg>
+        </button>
+        <button class="icon-btn" data-act="toggle-links" title="显示交互连线" id="linkBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/><path d="M8.2 8.2l7.6 7.6"/></svg>
+        </button>
+        <button class="icon-btn" data-act="inspect" title="标注模式：点元素看规格、导切图" id="inspectBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 8.5h17M8.5 3.5v17"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="right-actions">
@@ -2261,95 +2341,60 @@ function createCanvas(ctx) {
 
 /* ===== src/library.js ===== */
 /**
- * 左侧面板：页面列表 + 组件库
+ * 左侧面板：页面列表 + 图层树 + 组件库
  */
 
 
 
-const LAYER_META = {
-  text: { icon: 'T', label: '文本' },
-  rect: { icon: '▭', label: '矩形' },
-  circle: { icon: '◯', label: '圆形' },
-  line: { icon: '—', label: '分割线' },
-  image: { icon: '🖼', label: '图片' },
-  button: { icon: '▢', label: '按钮' },
-  input: { icon: '⌷', label: '输入框' },
-  textarea: { icon: '⌸', label: '多行框' },
-  checkbox: { icon: '☑', label: '复选框' },
-  switch: { icon: '⇄', label: '开关' },
-  icon: { icon: '★', label: '图标' },
-  badge: { icon: '◉', label: '标签' },
-  card: { icon: '▤', label: '卡片' },
-  listitem: { icon: '☰', label: '列表项' },
-  navbar: { icon: '▔', label: '导航栏' },
-  tabbar: { icon: '▁', label: '标签栏' },
-  group: { icon: '❐', label: '分组' }
+const NS = 'http://www.w3.org/2000/svg';
+
+/** 图层行用的 16×16 线性图标（path d） */
+const LAYER_ICONS = {
+  text: 'M4 6h16M12 6v13',
+  rect: 'M4 6h16v12H4z',
+  circle: 'M12 4.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15z',
+  line: 'M4 12h16',
+  image: 'M4 6h16v12H4zM7 15l3-3 2.5 2.5L15 12l2 3',
+  button: 'M3.5 8h17v8h-17z',
+  input: 'M3.5 8h17v8h-17zM7 10v4',
+  textarea: 'M3.5 6h17v12h-17zM7 10h10M7 13.5h7',
+  checkbox: 'M4.5 4.5h15v15h-15zM8 12l2.6 2.6L16 9.8',
+  switch: 'M3 9h18v6H3zM16 12a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z',
+  icon: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z',
+  badge: 'M4 9h16v6H4z',
+  card: 'M4 6h16v12H4zM4 10h16',
+  listitem: 'M4 8h16v8H4zM7 12h7',
+  navbar: 'M3.5 5h17v5h-17zM3.5 14h17',
+  tabbar: 'M3.5 15h17v4.5h-17zM8 17.2h.01M12 17.2h.01M16 17.2h.01',
+  group: 'M4 4h9v9H4zM11 11h9v9h-9z'
 };
 
-/** 图层列表：当前页所有元素，最上层显示在最前 */
-function renderLayerList(container, store, handlers) {
-  if (!container) return;
-  container.textContent = '';
-  const page = store.page;
-  const nodes = page.nodes.slice().reverse();
+const LAYER_LABELS = {
+  text: '文本', rect: '矩形', circle: '圆形', line: '分割线', image: '图片',
+  button: '按钮', input: '输入框', textarea: '多行框', checkbox: '复选框', switch: '开关',
+  icon: '图标', badge: '标签', card: '卡片', listitem: '列表项', navbar: '导航栏',
+  tabbar: '标签栏', group: '分组'
+};
 
-  if (!nodes.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-hint';
-    empty.style.padding = '2px 10px 10px';
-    empty.textContent = '本页还没有元素';
-    container.appendChild(empty);
-    return;
-  }
+const EYE_ON = 'M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12zM12 9.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z';
+const EYE_OFF = 'M4 4l16 16M9.8 5.6A9.6 9.6 0 0 1 12 5.4c6 0 9.5 6.6 9.5 6.6a17 17 0 0 1-3 3.6M6.4 7.4C3.9 9.2 2.5 12 2.5 12s3.5 5.5 9.5 5.5c1.3 0 2.5-.3 3.6-.7';
+const LOCK_ON = 'M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3';
+const LOCK_OFF = 'M6 11h12v9H6zM9 11V8a3 3 0 0 1 5.6-1.5';
 
-  for (const node of nodes) {
-    const meta = LAYER_META[node.type] || { icon: '□', label: node.type };
-    const row = document.createElement('div');
-    row.className = 'layer-item' + (store.isSelected(node.id) ? ' active' : '');
-    if (node.hidden) row.classList.add('is-hidden');
-
-    const g = document.createElement('span');
-    g.className = 'l-icon';
-    g.textContent = meta.icon;
-    row.appendChild(g);
-
-    const name = document.createElement('span');
-    name.className = 'l-name';
-    const text = (node.text || '').replace(/\s+/g, ' ').trim();
-    if (node.type === 'group') {
-      name.textContent = '分组（' + ((node.children && node.children.length) || 0) + '）';
-    } else {
-      name.textContent = (text ? text.slice(0, 14) : meta.label);
-    }
-    name.title = meta.label + (text ? '：' + text : '');
-    row.appendChild(name);
-
-    const eye = document.createElement('button');
-    eye.className = 'mini l-btn';
-    eye.textContent = node.hidden ? '◌' : '◉';
-    eye.title = node.hidden ? '显示' : '隐藏';
-    eye.addEventListener('click', (e) => {
-      e.stopPropagation();
-      store.updateNode(node.id, { hidden: !node.hidden });
-    });
-    row.appendChild(eye);
-
-    const lock = document.createElement('button');
-    lock.className = 'mini l-btn';
-    lock.textContent = node.locked ? '🔒' : '🔓';
-    lock.title = node.locked ? '解锁' : '锁定';
-    lock.addEventListener('click', (e) => {
-      e.stopPropagation();
-      store.updateNode(node.id, { locked: !node.locked });
-    });
-    row.appendChild(lock);
-
-    row.addEventListener('click', (e) => {
-      store.select([node.id], e.shiftKey);
-    });
-
-    container.appendChild(row);
-  }
+function svgIcon(d, size) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', String(size || 13));
+  svg.setAttribute('height', String(size || 13));
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.7');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('d', d);
+  svg.appendChild(p);
+  return svg;
 }
 
 function renderPageList(container, store, handlers) {
@@ -2361,8 +2406,8 @@ function renderPageList(container, store, handlers) {
     row.className = 'page-item' + (page.id === project.activePageId ? ' active' : '');
 
     const dot = document.createElement('span');
-    dot.textContent = '▤';
-    dot.style.opacity = '0.6';
+    dot.className = 'p-icon';
+    dot.appendChild(svgIcon('M4 5h16v14H4zM4 9h16', 12));
     row.appendChild(dot);
 
     const name = document.createElement('span');
@@ -2392,6 +2437,74 @@ function renderPageList(container, store, handlers) {
   }
 }
 
+/** 图层列表：当前页所有元素，最上层显示在最前 */
+function renderLayerList(container, store, handlers) {
+  if (!container) return;
+  container.textContent = '';
+  const page = store.page;
+  const nodes = page.nodes.slice().reverse();
+
+  if (!nodes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-hint';
+    empty.style.padding = '2px 10px 10px';
+    empty.textContent = '本页还没有元素';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const node of nodes) {
+    const path = LAYER_ICONS[node.type] || LAYER_ICONS.rect;
+    const label = LAYER_LABELS[node.type] || node.type;
+
+    const row = document.createElement('div');
+    row.className = 'layer-item' + (store.isSelected(node.id) ? ' active' : '');
+    if (node.hidden) row.classList.add('is-hidden');
+
+    const g = document.createElement('span');
+    g.className = 'l-icon';
+    g.appendChild(svgIcon(path, 13));
+    row.appendChild(g);
+
+    const name = document.createElement('span');
+    name.className = 'l-name';
+    const text = (node.text || '').replace(/\s+/g, ' ').trim();
+    if (node.type === 'group') {
+      name.textContent = '分组（' + ((node.children && node.children.length) || 0) + '）';
+    } else {
+      name.textContent = text ? text.slice(0, 14) : label;
+    }
+    name.title = label + (text ? '：' + text : '');
+    row.appendChild(name);
+
+    const eye = document.createElement('button');
+    eye.className = 'mini l-btn';
+    eye.appendChild(svgIcon(node.hidden ? EYE_OFF : EYE_ON, 12));
+    eye.title = node.hidden ? '显示' : '隐藏';
+    eye.addEventListener('click', (e) => {
+      e.stopPropagation();
+      store.updateNode(node.id, { hidden: !node.hidden });
+    });
+    row.appendChild(eye);
+
+    const lock = document.createElement('button');
+    lock.className = 'mini l-btn';
+    lock.appendChild(svgIcon(node.locked ? LOCK_ON : LOCK_OFF, 12));
+    lock.title = node.locked ? '解锁' : '锁定';
+    lock.addEventListener('click', (e) => {
+      e.stopPropagation();
+      store.updateNode(node.id, { locked: !node.locked });
+    });
+    row.appendChild(lock);
+
+    row.addEventListener('click', (e) => {
+      store.select([node.id], e.shiftKey);
+    });
+
+    container.appendChild(row);
+  }
+}
+
 function renderLibrary(container, store, handlers) {
   container.textContent = '';
   for (const comp of COMPONENTS) {
@@ -2400,7 +2513,7 @@ function renderLibrary(container, store, handlers) {
     item.title = '添加' + comp.label;
     item.draggable = true;
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('width', '20');
     svg.setAttribute('height', '20');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -2450,10 +2563,54 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
+const COLLAPSE_KEY = 'modao-open:collapsed-groups';
+
+function loadCollapsed() {
+  try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}'); } catch (e) { return {}; }
+}
+
+function saveCollapsed(map) {
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map)); } catch (e) { /* 忽略 */ }
+}
+
 function group(title, rows) {
   const g = el('div', { class: 'group' });
-  g.appendChild(el('div', { class: 'group-title', text: title }));
-  for (const r of rows) if (r) g.appendChild(r);
+  const collapsed = !!loadCollapsed()[title];
+  if (collapsed) g.classList.add('collapsed');
+
+  const head = el('div', { class: 'group-title group-head' });
+  const caret = el('span', { class: 'caret' });
+  const cs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  cs.setAttribute('width', '10');
+  cs.setAttribute('height', '10');
+  cs.setAttribute('viewBox', '0 0 24 24');
+  cs.setAttribute('fill', 'none');
+  cs.setAttribute('stroke', 'currentColor');
+  cs.setAttribute('stroke-width', '2.6');
+  cs.setAttribute('stroke-linecap', 'round');
+  cs.setAttribute('stroke-linejoin', 'round');
+  const cp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  cp.setAttribute('d', 'M9 6l6 6-6 6');
+  cs.appendChild(cp);
+  caret.appendChild(cs);
+  head.appendChild(caret);
+  head.appendChild(el('span', { text: title }));
+
+  const body = el('div', { class: 'group-body' });
+  for (const r of rows) if (r) body.appendChild(r);
+  if (collapsed) body.style.display = 'none';
+
+  head.addEventListener('click', () => {
+    const map = loadCollapsed();
+    map[title] = !map[title];
+    saveCollapsed(map);
+    const now = !!map[title];
+    g.classList.toggle('collapsed', now);
+    body.style.display = now ? 'none' : '';
+  });
+
+  g.appendChild(head);
+  g.appendChild(body);
   return g;
 }
 
@@ -3111,12 +3268,13 @@ function renderLinks(layer, store) {
     svg.appendChild(circle);
 
     const text = document.createElementNS(SVG_NS, 'text');
-    text.setAttribute('x', String(node.link.action === 'navigate' || node.link.action === 'url' ? Math.max(8, to.x - 110) : to.x + 6));
-    text.setAttribute('y', String(to.y - 6));
+    text.setAttribute('class', 'link-label');
+    // 标签居中在连线中点，并夹在画布内，避免贴边被裁掉
+    const midX = (from.x + to.x) / 2;
+    text.setAttribute('x', String(Math.max(40, Math.min(device.w - 40, midX))));
+    text.setAttribute('y', String((from.y + to.y) / 2 - 6));
+    text.setAttribute('text-anchor', 'middle');
     text.setAttribute('fill', '#1677ff');
-    text.setAttribute('stroke', 'rgba(255,255,255,0.92)');
-    text.setAttribute('stroke-width', '3');
-    text.setAttribute('paint-order', 'stroke');
     text.setAttribute('font-size', '10');
     text.setAttribute('font-family', 'Microsoft YaHei, sans-serif');
     text.textContent = label;
@@ -3126,6 +3284,24 @@ function renderLinks(layer, store) {
   }
 
   layer.appendChild(svg);
+
+  // 给标签补一层白色胶囊底，避免压在元素上不好读
+  try {
+    for (const t of svg.querySelectorAll('text.link-label')) {
+      const bb = t.getBBox();
+      const bg = document.createElementNS(SVG_NS, 'rect');
+      bg.setAttribute('x', String(bb.x - 4));
+      bg.setAttribute('y', String(bb.y - 1.5));
+      bg.setAttribute('width', String(bb.width + 8));
+      bg.setAttribute('height', String(bb.height + 3));
+      bg.setAttribute('rx', '3');
+      bg.setAttribute('fill', 'rgba(255,255,255,0.94)');
+      bg.setAttribute('stroke', 'rgba(22,119,255,0.35)');
+      bg.setAttribute('stroke-width', '0.6');
+      t.parentNode.insertBefore(bg, t);
+    }
+  } catch (e) { /* getBBox 在未布局时可能抛错，忽略 */ }
+
   layer.dataset.count = String(count);
 }
 

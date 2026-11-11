@@ -22,19 +22,41 @@
     </div>
 
     <div class="toolbar" id="toolbar">
-      <button class="tb" data-act="undo" title="撤销 Ctrl+Z">撤销</button>
-      <button class="tb" data-act="redo" title="重做 Ctrl+Shift+Z">重做</button>
+      <div class="tb-group">
+        <button class="icon-btn" data-act="undo" title="撤销 (Ctrl+Z)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a5 5 0 0 1 0 10h-3"/></svg>
+        </button>
+        <button class="icon-btn" data-act="redo" title="重做 (Ctrl+Shift+Z)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9h-9a5 5 0 0 0 0 10h3"/></svg>
+        </button>
+      </div>
       <span class="sep"></span>
       <select id="deviceSelect" class="tb-select" title="画布设备"></select>
       <span class="sep"></span>
-      <button class="tb" data-act="zoom-out" title="缩小">−</button>
-      <span id="zoomLabel" class="zoom-label">100%</span>
-      <button class="tb" data-act="zoom-in" title="放大">＋</button>
-      <button class="tb" data-act="zoom-fit" title="适应窗口">适应</button>
+      <div class="tb-group">
+        <button class="icon-btn" data-act="zoom-out" title="缩小">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6M8 11h6"/></svg>
+        </button>
+        <span id="zoomLabel" class="zoom-label">100%</span>
+        <button class="icon-btn" data-act="zoom-in" title="放大">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6M8 11h6M11 8v6"/></svg>
+        </button>
+        <button class="icon-btn" data-act="zoom-fit" title="适应窗口">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
       <span class="sep"></span>
-      <button class="tb" data-act="toggle-grid" title="网格/参考线" id="gridBtn">参考线</button>
-      <button class="tb" data-act="toggle-links" title="显示交互连线" id="linkBtn">连线</button>
-      <button class="tb" data-act="inspect" title="标注模式：点元素看规格、导切图" id="inspectBtn">标注</button>
+      <div class="tb-group">
+        <button class="icon-btn" data-act="toggle-grid" title="网格参考线" id="gridBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17"/></svg>
+        </button>
+        <button class="icon-btn" data-act="toggle-links" title="显示交互连线" id="linkBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/><path d="M8.2 8.2l7.6 7.6"/></svg>
+        </button>
+        <button class="icon-btn" data-act="inspect" title="标注模式：点元素看规格、导切图" id="inspectBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 8.5h17M8.5 3.5v17"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="right-actions">

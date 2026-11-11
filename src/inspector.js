@@ -22,10 +22,54 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
+const COLLAPSE_KEY = 'modao-open:collapsed-groups';
+
+function loadCollapsed() {
+  try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}'); } catch (e) { return {}; }
+}
+
+function saveCollapsed(map) {
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map)); } catch (e) { /* 忽略 */ }
+}
+
 function group(title, rows) {
   const g = el('div', { class: 'group' });
-  g.appendChild(el('div', { class: 'group-title', text: title }));
-  for (const r of rows) if (r) g.appendChild(r);
+  const collapsed = !!loadCollapsed()[title];
+  if (collapsed) g.classList.add('collapsed');
+
+  const head = el('div', { class: 'group-title group-head' });
+  const caret = el('span', { class: 'caret' });
+  const cs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  cs.setAttribute('width', '10');
+  cs.setAttribute('height', '10');
+  cs.setAttribute('viewBox', '0 0 24 24');
+  cs.setAttribute('fill', 'none');
+  cs.setAttribute('stroke', 'currentColor');
+  cs.setAttribute('stroke-width', '2.6');
+  cs.setAttribute('stroke-linecap', 'round');
+  cs.setAttribute('stroke-linejoin', 'round');
+  const cp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  cp.setAttribute('d', 'M9 6l6 6-6 6');
+  cs.appendChild(cp);
+  caret.appendChild(cs);
+  head.appendChild(caret);
+  head.appendChild(el('span', { text: title }));
+
+  const body = el('div', { class: 'group-body' });
+  for (const r of rows) if (r) body.appendChild(r);
+  if (collapsed) body.style.display = 'none';
+
+  head.addEventListener('click', () => {
+    const map = loadCollapsed();
+    map[title] = !map[title];
+    saveCollapsed(map);
+    const now = !!map[title];
+    g.classList.toggle('collapsed', now);
+    body.style.display = now ? 'none' : '';
+  });
+
+  g.appendChild(head);
+  g.appendChild(body);
   return g;
 }
 

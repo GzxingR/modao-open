@@ -123,12 +123,13 @@ export function renderLinks(layer, store) {
     svg.appendChild(circle);
 
     const text = document.createElementNS(SVG_NS, 'text');
-    text.setAttribute('x', String(node.link.action === 'navigate' || node.link.action === 'url' ? Math.max(8, to.x - 110) : to.x + 6));
-    text.setAttribute('y', String(to.y - 6));
+    text.setAttribute('class', 'link-label');
+    // 标签居中在连线中点，并夹在画布内，避免贴边被裁掉
+    const midX = (from.x + to.x) / 2;
+    text.setAttribute('x', String(Math.max(40, Math.min(device.w - 40, midX))));
+    text.setAttribute('y', String((from.y + to.y) / 2 - 6));
+    text.setAttribute('text-anchor', 'middle');
     text.setAttribute('fill', '#1677ff');
-    text.setAttribute('stroke', 'rgba(255,255,255,0.92)');
-    text.setAttribute('stroke-width', '3');
-    text.setAttribute('paint-order', 'stroke');
     text.setAttribute('font-size', '10');
     text.setAttribute('font-family', 'Microsoft YaHei, sans-serif');
     text.textContent = label;
@@ -138,6 +139,24 @@ export function renderLinks(layer, store) {
   }
 
   layer.appendChild(svg);
+
+  // 给标签补一层白色胶囊底，避免压在元素上不好读
+  try {
+    for (const t of svg.querySelectorAll('text.link-label')) {
+      const bb = t.getBBox();
+      const bg = document.createElementNS(SVG_NS, 'rect');
+      bg.setAttribute('x', String(bb.x - 4));
+      bg.setAttribute('y', String(bb.y - 1.5));
+      bg.setAttribute('width', String(bb.width + 8));
+      bg.setAttribute('height', String(bb.height + 3));
+      bg.setAttribute('rx', '3');
+      bg.setAttribute('fill', 'rgba(255,255,255,0.94)');
+      bg.setAttribute('stroke', 'rgba(22,119,255,0.35)');
+      bg.setAttribute('stroke-width', '0.6');
+      t.parentNode.insertBefore(bg, t);
+    }
+  } catch (e) { /* getBBox 在未布局时可能抛错，忽略 */ }
+
   layer.dataset.count = String(count);
 }
 
