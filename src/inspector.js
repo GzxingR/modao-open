@@ -470,6 +470,22 @@ export function renderInspector(container, store, handlers) {
         });
       });
     }
+  } else if (currentAction === 'openOverlay' || currentAction === 'closeOverlay') {
+    const overlays = store.page.nodes.filter((n) => n.type === 'group' && n.overlay);
+    if (!overlays.length) {
+      linkRows.push(el('div', { class: 'empty-hint', text: '本页还没有浮层。先选中一个分组，在下面「浮层」里打开。' }));
+    } else {
+      const nodeSelect = el('select');
+      for (const n of overlays) {
+        const o = el('option', { value: n.id, text: (n.name || '分组') + ' · 浮层' });
+        if (node.link && node.link.targetNodeId === n.id) o.selected = true;
+        nodeSelect.appendChild(o);
+      }
+      nodeSelect.addEventListener('change', () => {
+        handlers.update(node.id, { link: Object.assign(keep(), { action: currentAction, targetNodeId: nodeSelect.value }) });
+      });
+      linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
+    }
   } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle' || currentAction === 'scrollTo') {
     const nodeSelect = el('select');
     const candidates = store.page.nodes.filter((n) => n.id !== node.id);
@@ -494,7 +510,10 @@ export function renderInspector(container, store, handlers) {
     const next = { action: v, trigger: currentTrigger };
     if (v === 'navigate') next.targetPageId = pages[0] ? pages[0].id : null;
     else if (v === 'url') next.url = 'https://';
-    else {
+    else if (v === 'openOverlay' || v === 'closeOverlay') {
+      const ov = store.page.nodes.filter((n) => n.type === 'group' && n.overlay)[0];
+      next.targetNodeId = ov ? ov.id : null;
+    } else {
       const target = store.page.nodes.filter((n) => n.id !== node.id)[0];
       next.targetNodeId = target ? target.id : null;
     }
@@ -502,6 +521,36 @@ export function renderInspector(container, store, handlers) {
   });
 
   container.appendChild(group('交互（预览时生效）', linkRows));
+
+  /* ---------- 浮层（仅分组） ---------- */
+  if (node.type === 'group') {
+    const overlayRows = [];
+    overlayRows.push(el('div', { class: 'row' }, [
+      seg([
+        { label: '普通分组', value: 'n' },
+        { label: '作为浮层', value: 'y' }
+      ], node.overlay ? 'y' : 'n', (v) => store.setOverlay(node.id, { overlay: v === 'y' }))
+    ]));
+    if (node.overlay) {
+      overlayRows.push(el('div', { class: 'row' }, [
+        seg([
+          { label: '无遮罩', value: 'n' },
+          { label: '带遮罩', value: 'y' }
+        ], node.overlayMask ? 'y' : 'n', (v) => store.setOverlay(node.id, { overlayMask: v === 'y' }))
+      ]));
+      overlayRows.push(el('div', { class: 'row' }, [
+        seg([
+          { label: '默认关闭', value: 'n' },
+          { label: '默认打开', value: 'y' }
+        ], node.defaultOpen ? 'y' : 'n', (v) => store.setOverlay(node.id, { defaultOpen: v === 'y' }))
+      ]));
+      overlayRows.push(el('div', {
+        class: 'empty-hint',
+        text: '浮层在预览时挂到最上层；用「打开浮层 / 关闭浮层」两个交互控制它。'
+      }));
+    }
+    container.appendChild(group('浮层', overlayRows));
+  }
 
   /* ---------- 组件状态（动态组件 · 外观变体） ---------- */
   const stateRows = [];

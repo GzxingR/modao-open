@@ -59,6 +59,8 @@ export const ACTIONS = [
   { value: 'hide', label: '隐藏目标' },
   { value: 'toggle', label: '切换目标显隐' },
   { value: 'scrollTo', label: '滚动到目标' },
+  { value: 'openOverlay', label: '打开浮层' },
+  { value: 'closeOverlay', label: '关闭浮层' },
   { value: 'url', label: '打开链接' }
 ];
 
@@ -260,6 +262,10 @@ function baseNode(type, device) {
     // 组件状态（墨刀式动态组件的轻量实现：外观变体）
     states: null,        // [{ id, name, style: { bg, text, color, ... } }]
     activeStateId: null,
+    // 浮层（仅 group 用）：作为弹层挂在页面最上层，可带遮罩
+    overlay: false,
+    overlayMask: true,
+    defaultOpen: false,
     // 交互（墨刀式）：触发方式 + 行为
     link: null
   };

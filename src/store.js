@@ -268,6 +268,9 @@ export class Store {
       hidden: false,
       states: null,
       activeStateId: null,
+      overlay: false,
+      overlayMask: true,
+      defaultOpen: false,
       link: null,
       children: []
     };
@@ -342,6 +345,17 @@ export class Store {
 
   isGrouped(node) {
     return !!(node && node.type === 'group' && Array.isArray(node.children));
+  }
+
+  /** 把组设为/取消浮层 */
+  setOverlay(nodeId, patch) {
+    const node = this.nodeById(nodeId);
+    if (!node || node.type !== 'group') return;
+    this.mutate(() => {
+      if (patch.overlay !== undefined) node.overlay = !!patch.overlay;
+      if (patch.overlayMask !== undefined) node.overlayMask = !!patch.overlayMask;
+      if (patch.defaultOpen !== undefined) node.defaultOpen = !!patch.defaultOpen;
+    }, { reason: 'overlay' });
   }
 
   /* ---------- 剪贴板 ---------- */

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>overlay preview</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>body{margin:0;background:#0b0d10;display:flex;align-items:center;justify-content:center;height:100vh;}</style>
+</head>
+<body>
+<div id="mount"></div>
+<script type="module">
+import { getDevice, createProject, createNode } from '../src/model.js';
+import { createPreviewRuntime } from '../src/links.js';
+
+const s = createProject('浮层演示');
+const dev = getDevice('iphone14');
+const page = s.pages[0];
+page.deviceId = 'iphone14';
+
+// 背景内容
+page.nodes.push(createNode('navbar', dev, { x: 0, y: 0, w: 390, h: 88, text: '商品详情', fontSize: 20, fontWeight: 700 }));
+page.nodes.push(createNode('image', dev, { x: 0, y: 88, w: 390, h: 220, text: '商品主图', fontSize: 16, color: '#999999' }));
+page.nodes.push(createNode('text', dev, { x: 16, y: 324, w: 358, h: 26, text: '2024新款简约双肩包', fontSize: 18, fontWeight: 700 }));
+page.nodes.push(createNode('text', dev, { x: 16, y: 358, w: 160, h: 32, text: '¥99', fontSize: 24, fontWeight: 700, color: '#ff4d4f' }));
+
+const openBtn = createNode('button', dev, {
+  x: 60, y: 794, w: 330, h: 50, text: '立即购买', bg: '#ff7d00', radius: 0, fontSize: 16
+});
+page.nodes.push(createNode('line', dev, { x: 0, y: 793, w: 390, h: 1 }));
+page.nodes.push(openBtn);
+
+// 浮层
+const ov = createNode('rect', dev, { x: 45, y: 420, w: 300, h: 160, bg: 'transparent' });
+ov.type = 'group';
+ov.overlay = true;
+ov.overlayMask = true;
+ov.defaultOpen = false;
+const okBtn = createNode('button', dev, { x: 160, y: 106, w: 120, h: 36, text: '确定', bg: '#ff7d00', radius: 8, fontSize: 14 });
+const cancelBtn = createNode('button', dev, { x: 20, y: 106, w: 120, h: 36, text: '取消', bg: '#f2f3f5', color: '#333333', radius: 8, fontSize: 14 });
+ov.children = [
+  createNode('rect', dev, { x: 0, y: 0, w: 300, h: 160, bg: '#ffffff', radius: 12 }),
+  createNode('text', dev, { x: 0, y: 24, w: 300, h: 24, text: '确认购买该商品？', fontSize: 17, fontWeight: 700, align: 'center' }),
+  createNode('text', dev, { x: 0, y: 58, w: 300, h: 20, text: '¥99 × 1', fontSize: 14, color: '#ff4d4f', align: 'center' }),
+  cancelBtn,
+  okBtn
+];
+page.nodes.push(ov);
+
+openBtn.link = { action: 'openOverlay', trigger: 'click', targetNodeId: ov.id };
+okBtn.link = { action: 'closeOverlay', trigger: 'click', targetNodeId: ov.id };
+cancelBtn.link = { action: 'closeOverlay', trigger: 'click', targetNodeId: ov.id };
+
+const host = document.getElementById('mount');
+host.style.cssText = 'width:390px;height:844px;background:#fff;box-shadow:0 12px 48px rgba(0,0,0,.6);overflow:hidden;position:relative;';
+
+const rt = createPreviewRuntime(JSON.parse(JSON.stringify(s)), page.id, host);
+rt.start();
+
+// 自动点一下「立即购买」，把浮层打开，方便截图核对
+setTimeout(() => {
+  const btn = host.querySelector('[data-id="' + openBtn.id + '"]');
+  if (btn) btn.click();
+  document.title = 'overlay opened';
+}, 120);
+</script>
+</body>
+</html>

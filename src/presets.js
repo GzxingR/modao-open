@@ -101,6 +101,30 @@ function goodsPage(p) {
   p.nodes.push(createNode('button', dev, {
     x: 60, y: 794, w: 330, h: 50, text: '立即购买', bg: '#ff7d00', radius: 0, fontSize: 16
   }));
+
+  // 浮层示例：确认购买弹窗（默认关闭，点「立即购买」打开）
+  const ov = createNode('rect', dev, { x: 45, y: 420, w: 300, h: 160, bg: 'transparent' });
+  ov.type = 'group';
+  ov.name = '确认购买浮层';
+  ov.overlay = true;
+  ov.overlayMask = true;
+  ov.defaultOpen = false;
+  ov.children = [
+    createNode('rect', dev, { x: 0, y: 0, w: 300, h: 160, bg: '#ffffff', radius: 12 }),
+    createNode('text', dev, {
+      x: 0, y: 24, w: 300, h: 24, text: '确认购买该商品？', fontSize: 17, fontWeight: 700, align: 'center'
+    }),
+    createNode('text', dev, {
+      x: 0, y: 58, w: 300, h: 20, text: '¥99 × 1', fontSize: 14, color: '#ff4d4f', align: 'center'
+    }),
+    createNode('button', dev, {
+      x: 20, y: 106, w: 120, h: 36, text: '取消', bg: '#f2f3f5', color: '#333333', radius: 8, fontSize: 14
+    }),
+    createNode('button', dev, {
+      x: 160, y: 106, w: 120, h: 36, text: '确定', bg: '#ff7d00', radius: 8, fontSize: 14
+    })
+  ];
+  p.nodes.push(ov);
 }
 
 export function buildAssignmentProject() {

@@ -185,6 +185,7 @@ export function createPreviewRuntime(project, startPageId, mount) {
     host.style.overflow = 'hidden';
 
     const nodeEls = new Map();
+    const overlayMasks = new Map();
 
     function rerenderNode(node) {
       const old = nodeEls.get(node.id);
@@ -230,6 +231,16 @@ export function createPreviewRuntime(project, startPageId, mount) {
         return;
       }
 
+      if (link.action === 'openOverlay' || link.action === 'closeOverlay') {
+        if (!target.overlay) return;
+        const oel = nodeEls.get(target.id);
+        const mask = overlayMasks.get(target.id);
+        const show = link.action === 'openOverlay';
+        if (oel) oel.style.display = show ? '' : 'none';
+        if (mask) mask.style.display = show ? '' : 'none';
+        return;
+      }
+
       const el = nodeEls.get(target.id);
       if (!el) return;
 
@@ -257,13 +268,35 @@ export function createPreviewRuntime(project, startPageId, mount) {
       }
     }
 
+    const overlays = [];
     for (const node of page.nodes) {
       if (node.hidden) continue;
+      if (node.type === 'group' && node.overlay) { overlays.push(node); continue; }
       const el = createNodeEl(node, { interactive: true });
       if (hiddenState.get(node.id) === true) el.style.display = 'none';
       attach(node, el);
       host.appendChild(el);
       nodeEls.set(node.id, el);
+    }
+
+    // 浮层挂到最上层：遮罩 + 浮层本体
+    for (const node of overlays) {
+      let mask = null;
+      if (node.overlayMask) {
+        mask = document.createElement('div');
+        mask.className = 'ov-mask';
+        mask.dataset.for = node.id;
+        mask.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:900;';
+        if (!node.defaultOpen) mask.style.display = 'none';
+        host.appendChild(mask);
+      }
+      const el = createNodeEl(node, { interactive: true });
+      el.style.zIndex = '901';
+      if (!node.defaultOpen) el.style.display = 'none';
+      attach(node, el);
+      host.appendChild(el);
+      nodeEls.set(node.id, el);
+      overlayMasks.set(node.id, mask);
     }
 
     mount.appendChild(host);

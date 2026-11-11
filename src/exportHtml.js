@@ -29,12 +29,19 @@ function nodeHtml(node, overrideStateId) {
     if (link.url) el.dataset.lu = link.url;
     el.style.cursor = 'pointer';
   }
+  if (node.type === 'group' && node.overlay) {
+    el.dataset.ov = '1';
+    if (node.overlayMask) el.dataset.ovm = '1';
+    if (node.defaultOpen) el.dataset.ovd = '1';
+    el.style.zIndex = '901';
+  }
   return el.outerHTML;
 }
 
 function pagePayload(page) {
   const device = resolveDevice(page);
   const nodes = [];
+  const overlays = [];
   for (const node of page.nodes) {
     if (node.hidden) continue;
     const item = { id: node.id, html: nodeHtml(node) };
@@ -43,15 +50,17 @@ function pagePayload(page) {
       for (const st of node.states) item.states[st.id] = nodeHtml(node, st.id);
       item.active = node.activeStateId || node.states[0].id;
     }
-    nodes.push(item);
+    if (node.type === 'group' && node.overlay) overlays.push(item);
+    else nodes.push(item);
   }
+  // 浮层放最后，保证层级在最上
   return {
     id: page.id,
     name: page.name,
     w: device.w,
     h: device.h,
     bg: page.bg || '#ffffff',
-    nodes
+    nodes: nodes.concat(overlays)
   };
 }
 
@@ -74,11 +83,28 @@ const RUNTIME = `
     box.style.overflow = 'hidden';
     pages[p.id] = { data: p, box: box };
 
+    var overlays = [];
     p.nodes.forEach(function (n) {
       var holder = document.createElement('div');
       holder.innerHTML = n.html;
       var el = holder.firstElementChild;
       if (!el) return;
+      if (el.dataset.ov === '1') { overlays.push(el); return; }
+      box.appendChild(el);
+      bind(el, box, p);
+    });
+
+    overlays.forEach(function (el) {
+      if (el.dataset.ovm === '1') {
+        var mask = document.createElement('div');
+        mask.className = 'ov-mask';
+        mask.dataset.for = el.dataset.id;
+        mask.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:900;';
+        if (el.dataset.ovd !== '1') mask.style.display = 'none';
+        box.appendChild(mask);
+      }
+      el.style.zIndex = '901';
+      if (el.dataset.ovd !== '1') el.style.display = 'none';
       box.appendChild(el);
       bind(el, box, p);
     });
@@ -162,6 +188,12 @@ const RUNTIME = `
     if (act === 'show') target.style.display = '';
     else if (act === 'hide') target.style.display = 'none';
     else if (act === 'toggle') target.style.display = (target.style.display === 'none' ? '' : 'none');
+    else if (act === 'openOverlay' || act === 'closeOverlay') {
+      var showOv = (act === 'openOverlay');
+      target.style.display = showOv ? '' : 'none';
+      var ovMask = box.querySelector('.ov-mask[data-for="' + nodeId + '"]');
+      if (ovMask) ovMask.style.display = showOv ? '' : 'none';
+    }
     else if (act === 'scrollTo' && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 

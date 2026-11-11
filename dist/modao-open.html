@@ -897,6 +897,8 @@ const ACTIONS = [
   { value: 'hide', label: '隐藏目标' },
   { value: 'toggle', label: '切换目标显隐' },
   { value: 'scrollTo', label: '滚动到目标' },
+  { value: 'openOverlay', label: '打开浮层' },
+  { value: 'closeOverlay', label: '关闭浮层' },
   { value: 'url', label: '打开链接' }
 ];
 
@@ -1098,6 +1100,10 @@ function baseNode(type, device) {
     // 组件状态（墨刀式动态组件的轻量实现：外观变体）
     states: null,        // [{ id, name, style: { bg, text, color, ... } }]
     activeStateId: null,
+    // 浮层（仅 group 用）：作为弹层挂在页面最上层，可带遮罩
+    overlay: false,
+    overlayMask: true,
+    defaultOpen: false,
     // 交互（墨刀式）：触发方式 + 行为
     link: null
   };
@@ -1471,6 +1477,9 @@ class Store {
       hidden: false,
       states: null,
       activeStateId: null,
+      overlay: false,
+      overlayMask: true,
+      defaultOpen: false,
       link: null,
       children: []
     };
@@ -1545,6 +1554,17 @@ class Store {
 
   isGrouped(node) {
     return !!(node && node.type === 'group' && Array.isArray(node.children));
+  }
+
+  /** 把组设为/取消浮层 */
+  setOverlay(nodeId, patch) {
+    const node = this.nodeById(nodeId);
+    if (!node || node.type !== 'group') return;
+    this.mutate(() => {
+      if (patch.overlay !== undefined) node.overlay = !!patch.overlay;
+      if (patch.overlayMask !== undefined) node.overlayMask = !!patch.overlayMask;
+      if (patch.defaultOpen !== undefined) node.defaultOpen = !!patch.defaultOpen;
+    }, { reason: 'overlay' });
   }
 
   /* ---------- 剪贴板 ---------- */
@@ -3497,6 +3517,22 @@ function renderInspector(container, store, handlers) {
         });
       });
     }
+  } else if (currentAction === 'openOverlay' || currentAction === 'closeOverlay') {
+    const overlays = store.page.nodes.filter((n) => n.type === 'group' && n.overlay);
+    if (!overlays.length) {
+      linkRows.push(el('div', { class: 'empty-hint', text: '本页还没有浮层。先选中一个分组，在下面「浮层」里打开。' }));
+    } else {
+      const nodeSelect = el('select');
+      for (const n of overlays) {
+        const o = el('option', { value: n.id, text: (n.name || '分组') + ' · 浮层' });
+        if (node.link && node.link.targetNodeId === n.id) o.selected = true;
+        nodeSelect.appendChild(o);
+      }
+      nodeSelect.addEventListener('change', () => {
+        handlers.update(node.id, { link: Object.assign(keep(), { action: currentAction, targetNodeId: nodeSelect.value }) });
+      });
+      linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
+    }
   } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle' || currentAction === 'scrollTo') {
     const nodeSelect = el('select');
     const candidates = store.page.nodes.filter((n) => n.id !== node.id);
@@ -3521,7 +3557,10 @@ function renderInspector(container, store, handlers) {
     const next = { action: v, trigger: currentTrigger };
     if (v === 'navigate') next.targetPageId = pages[0] ? pages[0].id : null;
     else if (v === 'url') next.url = 'https://';
-    else {
+    else if (v === 'openOverlay' || v === 'closeOverlay') {
+      const ov = store.page.nodes.filter((n) => n.type === 'group' && n.overlay)[0];
+      next.targetNodeId = ov ? ov.id : null;
+    } else {
       const target = store.page.nodes.filter((n) => n.id !== node.id)[0];
       next.targetNodeId = target ? target.id : null;
     }
@@ -3529,6 +3568,36 @@ function renderInspector(container, store, handlers) {
   });
 
   container.appendChild(group('交互（预览时生效）', linkRows));
+
+  /* ---------- 浮层（仅分组） ---------- */
+  if (node.type === 'group') {
+    const overlayRows = [];
+    overlayRows.push(el('div', { class: 'row' }, [
+      seg([
+        { label: '普通分组', value: 'n' },
+        { label: '作为浮层', value: 'y' }
+      ], node.overlay ? 'y' : 'n', (v) => store.setOverlay(node.id, { overlay: v === 'y' }))
+    ]));
+    if (node.overlay) {
+      overlayRows.push(el('div', { class: 'row' }, [
+        seg([
+          { label: '无遮罩', value: 'n' },
+          { label: '带遮罩', value: 'y' }
+        ], node.overlayMask ? 'y' : 'n', (v) => store.setOverlay(node.id, { overlayMask: v === 'y' }))
+      ]));
+      overlayRows.push(el('div', { class: 'row' }, [
+        seg([
+          { label: '默认关闭', value: 'n' },
+          { label: '默认打开', value: 'y' }
+        ], node.defaultOpen ? 'y' : 'n', (v) => store.setOverlay(node.id, { defaultOpen: v === 'y' }))
+      ]));
+      overlayRows.push(el('div', {
+        class: 'empty-hint',
+        text: '浮层在预览时挂到最上层；用「打开浮层 / 关闭浮层」两个交互控制它。'
+      }));
+    }
+    container.appendChild(group('浮层', overlayRows));
+  }
 
   /* ---------- 组件状态（动态组件 · 外观变体） ---------- */
   const stateRows = [];
@@ -3816,6 +3885,7 @@ function createPreviewRuntime(project, startPageId, mount) {
     host.style.overflow = 'hidden';
 
     const nodeEls = new Map();
+    const overlayMasks = new Map();
 
     function rerenderNode(node) {
       const old = nodeEls.get(node.id);
@@ -3861,6 +3931,16 @@ function createPreviewRuntime(project, startPageId, mount) {
         return;
       }
 
+      if (link.action === 'openOverlay' || link.action === 'closeOverlay') {
+        if (!target.overlay) return;
+        const oel = nodeEls.get(target.id);
+        const mask = overlayMasks.get(target.id);
+        const show = link.action === 'openOverlay';
+        if (oel) oel.style.display = show ? '' : 'none';
+        if (mask) mask.style.display = show ? '' : 'none';
+        return;
+      }
+
       const el = nodeEls.get(target.id);
       if (!el) return;
 
@@ -3888,13 +3968,35 @@ function createPreviewRuntime(project, startPageId, mount) {
       }
     }
 
+    const overlays = [];
     for (const node of page.nodes) {
       if (node.hidden) continue;
+      if (node.type === 'group' && node.overlay) { overlays.push(node); continue; }
       const el = createNodeEl(node, { interactive: true });
       if (hiddenState.get(node.id) === true) el.style.display = 'none';
       attach(node, el);
       host.appendChild(el);
       nodeEls.set(node.id, el);
+    }
+
+    // 浮层挂到最上层：遮罩 + 浮层本体
+    for (const node of overlays) {
+      let mask = null;
+      if (node.overlayMask) {
+        mask = document.createElement('div');
+        mask.className = 'ov-mask';
+        mask.dataset.for = node.id;
+        mask.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:900;';
+        if (!node.defaultOpen) mask.style.display = 'none';
+        host.appendChild(mask);
+      }
+      const el = createNodeEl(node, { interactive: true });
+      el.style.zIndex = '901';
+      if (!node.defaultOpen) el.style.display = 'none';
+      attach(node, el);
+      host.appendChild(el);
+      nodeEls.set(node.id, el);
+      overlayMasks.set(node.id, mask);
     }
 
     mount.appendChild(host);
@@ -4219,12 +4321,19 @@ function nodeHtml(node, overrideStateId) {
     if (link.url) el.dataset.lu = link.url;
     el.style.cursor = 'pointer';
   }
+  if (node.type === 'group' && node.overlay) {
+    el.dataset.ov = '1';
+    if (node.overlayMask) el.dataset.ovm = '1';
+    if (node.defaultOpen) el.dataset.ovd = '1';
+    el.style.zIndex = '901';
+  }
   return el.outerHTML;
 }
 
 function pagePayload(page) {
   const device = resolveDevice(page);
   const nodes = [];
+  const overlays = [];
   for (const node of page.nodes) {
     if (node.hidden) continue;
     const item = { id: node.id, html: nodeHtml(node) };
@@ -4233,15 +4342,17 @@ function pagePayload(page) {
       for (const st of node.states) item.states[st.id] = nodeHtml(node, st.id);
       item.active = node.activeStateId || node.states[0].id;
     }
-    nodes.push(item);
+    if (node.type === 'group' && node.overlay) overlays.push(item);
+    else nodes.push(item);
   }
+  // 浮层放最后，保证层级在最上
   return {
     id: page.id,
     name: page.name,
     w: device.w,
     h: device.h,
     bg: page.bg || '#ffffff',
-    nodes
+    nodes: nodes.concat(overlays)
   };
 }
 
@@ -4264,11 +4375,28 @@ const RUNTIME = `
     box.style.overflow = 'hidden';
     pages[p.id] = { data: p, box: box };
 
+    var overlays = [];
     p.nodes.forEach(function (n) {
       var holder = document.createElement('div');
       holder.innerHTML = n.html;
       var el = holder.firstElementChild;
       if (!el) return;
+      if (el.dataset.ov === '1') { overlays.push(el); return; }
+      box.appendChild(el);
+      bind(el, box, p);
+    });
+
+    overlays.forEach(function (el) {
+      if (el.dataset.ovm === '1') {
+        var mask = document.createElement('div');
+        mask.className = 'ov-mask';
+        mask.dataset.for = el.dataset.id;
+        mask.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:900;';
+        if (el.dataset.ovd !== '1') mask.style.display = 'none';
+        box.appendChild(mask);
+      }
+      el.style.zIndex = '901';
+      if (el.dataset.ovd !== '1') el.style.display = 'none';
       box.appendChild(el);
       bind(el, box, p);
     });
@@ -4352,6 +4480,12 @@ const RUNTIME = `
     if (act === 'show') target.style.display = '';
     else if (act === 'hide') target.style.display = 'none';
     else if (act === 'toggle') target.style.display = (target.style.display === 'none' ? '' : 'none');
+    else if (act === 'openOverlay' || act === 'closeOverlay') {
+      var showOv = (act === 'openOverlay');
+      target.style.display = showOv ? '' : 'none';
+      var ovMask = box.querySelector('.ov-mask[data-for="' + nodeId + '"]');
+      if (ovMask) ovMask.style.display = showOv ? '' : 'none';
+    }
     else if (act === 'scrollTo' && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
@@ -4875,6 +5009,30 @@ function goodsPage(p) {
   p.nodes.push(createNode('button', dev, {
     x: 60, y: 794, w: 330, h: 50, text: '立即购买', bg: '#ff7d00', radius: 0, fontSize: 16
   }));
+
+  // 浮层示例：确认购买弹窗（默认关闭，点「立即购买」打开）
+  const ov = createNode('rect', dev, { x: 45, y: 420, w: 300, h: 160, bg: 'transparent' });
+  ov.type = 'group';
+  ov.name = '确认购买浮层';
+  ov.overlay = true;
+  ov.overlayMask = true;
+  ov.defaultOpen = false;
+  ov.children = [
+    createNode('rect', dev, { x: 0, y: 0, w: 300, h: 160, bg: '#ffffff', radius: 12 }),
+    createNode('text', dev, {
+      x: 0, y: 24, w: 300, h: 24, text: '确认购买该商品？', fontSize: 17, fontWeight: 700, align: 'center'
+    }),
+    createNode('text', dev, {
+      x: 0, y: 58, w: 300, h: 20, text: '¥99 × 1', fontSize: 14, color: '#ff4d4f', align: 'center'
+    }),
+    createNode('button', dev, {
+      x: 20, y: 106, w: 120, h: 36, text: '取消', bg: '#f2f3f5', color: '#333333', radius: 8, fontSize: 14
+    }),
+    createNode('button', dev, {
+      x: 160, y: 106, w: 120, h: 36, text: '确定', bg: '#ff7d00', radius: 8, fontSize: 14
+    })
+  ];
+  p.nodes.push(ov);
 }
 
 function buildAssignmentProject() {
