@@ -16,7 +16,23 @@ export function createCanvas(ctx) {
 
   /* ---------------- 渲染 ---------------- */
 
+  /** 影响 DOM 结构的字段指纹（不含 x/y/w/h，因为它们可以增量更新） */
+  function signatureOf(node) {
+    const kids = Array.isArray(node.children)
+      ? node.children.map((k) => [k.id, k.x, k.y, k.w, k.h, k.type, k.text].join(',')).join('|')
+      : '';
+    return JSON.stringify([
+      node.type, node.bg, node.radius, node.opacity,
+      node.text, node.fontSize, node.fontWeight, node.color,
+      node.align, node.lineHeight, node.icon, node.checked, node.on,
+      node.src ? node.src.length : 0, node.objectFit,
+      node.borderWidth, node.borderColor, node.activeStateId,
+      node.hidden ? 1 : 0, kids
+    ]);
+  }
+
   function render() {
+    const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
     const page = store.page;
     const device = store.device;
     canvasHost.style.width = device.w + 'px';
@@ -24,20 +40,57 @@ export function createCanvas(ctx) {
     canvasHost.style.background = page.bg || '#ffffff';
     canvasHost.classList.toggle('grid', !!store.state.showGrid);
 
-    nodesLayer.textContent = '';
-    nodeEls = new Map();
+    const seen = new Set();
+    let created = 0;
+    let reused = 0;
 
-    for (const node of page.nodes) {
+    page.nodes.forEach((node, index) => {
+      seen.add(node.id);
+      const sig = signatureOf(node);
+      const existing = nodeEls.get(node.id);
+
+      if (existing && existing.__sig === sig) {
+        // 结构没变：只同步位置/尺寸/状态，复用 DOM
+        existing.style.left = node.x + 'px';
+        existing.style.top = node.y + 'px';
+        existing.style.width = node.w + 'px';
+        existing.style.height = node.h + 'px';
+        existing.style.zIndex = String(index + 1);
+        existing.style.display = node.hidden ? 'none' : '';
+        existing.classList.toggle('sel', store.isSelected(node.id));
+        existing.classList.toggle('locked', !!node.locked);
+        reused += 1;
+        return;
+      }
+
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
       const el = createNodeEl(node, { interactive: true });
+      el.__sig = sig;
+      el.style.zIndex = String(index + 1);
       if (store.isSelected(node.id)) el.classList.add('sel');
       if (node.locked) el.classList.add('locked');
       el.addEventListener('pointerdown', (e) => onNodePointerDown(e, node));
       nodesLayer.appendChild(el);
       nodeEls.set(node.id, el);
+      created += 1;
+    });
+
+    // 清掉已删除的元素
+    for (const [id, el] of Array.from(nodeEls.entries())) {
+      if (seen.has(id)) continue;
+      if (el.parentNode) el.parentNode.removeChild(el);
+      nodeEls.delete(id);
     }
 
     renderSelectionHandles();
     applyZoom();
+
+    if (started) {
+      canvasHost.dataset.lastRenderMs = (performance.now() - started).toFixed(2);
+      canvasHost.dataset.lastRenderReused = String(reused);
+      canvasHost.dataset.lastRenderCreated = String(created);
+    }
   }
 
   function renderSelectionHandles() {

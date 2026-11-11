@@ -147,12 +147,27 @@ let libKeyword = '';
 function renderAll(reason) {
   projectNameInput.value = store.project.name;
   deviceSelect.value = store.page.deviceId;
-  renderPageList(pageListEl, store, handlers);
-  renderLayerList(document.getElementById('layerList'), store, handlers);
-  renderLibrary(libraryEl, store, handlers, libKeyword);
+  // 只跟位置/尺寸有关的变化：列表类面板不必重建
+  const positionOnly = reason === 'move' || reason === 'resize';
+
+  if (!positionOnly) {
+    renderPageList(pageListEl, store, handlers);
+    renderLayerList(document.getElementById('layerList'), store, handlers);
+    renderLibrary(libraryEl, store, handlers, libKeyword);
+  }
+
   canvas.render();
-  renderLinks(linksLayer, store);
-  renderInspector(inspectorEl, store, handlers);
+
+  if (!positionOnly) {
+    renderLinks(linksLayer, store);
+  }
+
+  // 正在属性面板里打字时不要重建它，否则输入框会失焦
+  const active = document.activeElement;
+  const typingInPanel = !!(active && inspectorEl.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName));
+  if (!typingInPanel) {
+    renderInspector(inspectorEl, store, handlers);
+  }
   zoomLabel.textContent = Math.round(store.state.zoom * 100) + '%';
   $('gridBtn').classList.toggle('on', !!store.state.showGrid);
   $('linkBtn').classList.toggle('on', !!store.state.showLinks);
