@@ -19,6 +19,7 @@ OUT_FILE = os.path.join(OUT_DIR, "modao-open.html")
 ORDER = [
     "model.js",
     "store.js",
+    "contextmenu.js",
     "nodes.js",
     "canvas.js",
     "library.js",

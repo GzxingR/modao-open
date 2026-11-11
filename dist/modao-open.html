@@ -488,6 +488,61 @@ textarea.full {
 }
 .modal-body input:focus, .modal-body select:focus { border-color: var(--accent); }
 
+/* ---------- 空状态引导 ---------- */
+.empty-guide {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, 80%);
+  background: rgba(27, 31, 38, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+  color: var(--text);
+}
+.empty-guide[hidden] { display: none; }
+.eg-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.eg-steps { margin: 0 0 14px; padding-left: 18px; font-size: 12px; line-height: 1.9; color: var(--text-dim); }
+.eg-actions { display: flex; gap: 8px; }
+
+/* ---------- 右键菜单 ---------- */
+.ctx-menu {
+  position: fixed;
+  min-width: 176px;
+  background: #21262f;
+  border: 1px solid #333b47;
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+.ctx-menu[hidden] { display: none; }
+.ctx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.ctx-item:hover:not(:disabled) { background: #2c333f; }
+.ctx-item:disabled { opacity: 0.4; cursor: default; }
+.ctx-item.danger { color: #ff9b9d; }
+.ctx-hint { font-size: 10px; color: var(--text-dim); }
+.ctx-divider { height: 1px; background: var(--line); margin: 4px 2px; }
+
 /* ---------- preview ---------- */
 .preview-mask {
   position: fixed;
@@ -630,6 +685,18 @@ textarea.full {
             <div class="nodes-layer" id="nodesLayer"></div>
             <div class="hints-layer" id="hintsLayer"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="empty-guide" id="emptyGuide" hidden>
+        <div class="eg-title">开始画第一个页面</div>
+        <ol class="eg-steps">
+          <li>左边组件库点一下，元素就加到画布</li>
+          <li>拖动手柄改尺寸，右侧面板改样式</li>
+          <li>顶部「预览」看效果，「导出」交作业</li>
+        </ol>
+        <div class="eg-actions">
+          <button class="tb" data-act="preset">载入作业示例</button>
         </div>
       </div>
     </main>
@@ -1057,6 +1124,7 @@ class Store {
       showGrid: true,
       showLinks: true,
       inspectMode: false,
+      spacePanning: false,
       fitRequested: true
     };
     this.listeners = new Set();
@@ -1578,6 +1646,13 @@ class Store {
     this.emit('view');
   }
 
+  /** 空格按住进入平移模式 */
+  setSpacePanning(on) {
+    if (this.state.spacePanning === on) return;
+    this.state.spacePanning = on;
+    this.emit('view');
+  }
+
   /* ---------- 持久化 ---------- */
   persist() {
     try {
@@ -1617,6 +1692,85 @@ class Store {
 }
 
 const store = new Store();
+
+/* ===== src/contextmenu.js ===== */
+/**
+ * 画布右键菜单：由调用方给菜单项，这里只负责定位、显示和关闭。
+ */
+
+let menuEl = null;
+let currentItems = [];
+
+function ensureMenu() {
+  if (menuEl && document.body.contains(menuEl)) return menuEl;
+  menuEl = document.createElement('div');
+  menuEl.id = 'ctxMenu';
+  menuEl.className = 'ctx-menu';
+  menuEl.hidden = true;
+  document.body.appendChild(menuEl);
+
+  // 点击其它地方关闭
+  document.addEventListener('pointerdown', (e) => {
+    if (menuEl && !menuEl.hidden && !menuEl.contains(e.target)) hideMenu();
+  }, true);
+  window.addEventListener('blur', hideMenu);
+  window.addEventListener('resize', hideMenu);
+  return menuEl;
+}
+
+function hideMenu() {
+  if (menuEl) menuEl.hidden = true;
+  currentItems = [];
+}
+
+/**
+ * 打开菜单。items: [{ label, hint?, action:()=>void, disabled?, danger?, divider? }]
+ */
+function openMenu(x, y, items) {
+  const el = ensureMenu();
+  el.textContent = '';
+  currentItems = items || [];
+
+  for (const item of currentItems) {
+    if (item.divider) {
+      const d = document.createElement('div');
+      d.className = 'ctx-divider';
+      el.appendChild(d);
+      continue;
+    }
+    const btn = document.createElement('button');
+    btn.className = 'ctx-item' + (item.danger ? ' danger' : '');
+    btn.textContent = item.label;
+    if (item.hint) {
+      const h = document.createElement('span');
+      h.className = 'ctx-hint';
+      h.textContent = item.hint;
+      btn.appendChild(h);
+    }
+    if (item.disabled) {
+      btn.disabled = true;
+    } else {
+      btn.addEventListener('click', () => {
+        hideMenu();
+        try { item.action(); } catch (e) { console.error('[ctxmenu]', e); }
+      });
+    }
+    el.appendChild(btn);
+  }
+
+  el.hidden = false;
+  // 先显示再测尺寸，避免超出视口
+  const rect = el.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - 8;
+  const maxY = window.innerHeight - rect.height - 8;
+  el.style.left = Math.max(8, Math.min(x, maxX)) + 'px';
+  el.style.top = Math.max(8, Math.min(y, maxY)) + 'px';
+  return el;
+}
+
+function isMenuOpen() {
+  return !!(menuEl && !menuEl.hidden);
+}
 
 /* ===== src/nodes.js ===== */
 /**
@@ -2051,6 +2205,7 @@ function createCanvas(ctx) {
 
   function onCanvasPointerDown(e) {
     if (e.button !== 0) return;
+    if (store.state.spacePanning) { startPan(e); return; }
     const id = hitTest(e.target);
     if (id) return; // 点到节点，由节点自己处理
 
@@ -2116,6 +2271,7 @@ function createCanvas(ctx) {
 
   function onNodePointerDown(e, node) {
     if (e.button !== 0) return;
+    if (store.state.spacePanning) { e.stopPropagation(); startPan(e); return; }
     e.stopPropagation();
     if (store.state.inspectMode) {
       if (ctx.onInspect) ctx.onInspect(node);
@@ -2331,6 +2487,64 @@ function createCanvas(ctx) {
     store.persist();
     render();
   }
+
+  /* ---------------- Ctrl+滚轮缩放 ---------------- */
+
+  canvasHost.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const scroller = document.getElementById('stageScroll');
+    const rect = canvasHost.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / store.state.zoom;
+    const py = (e.clientY - rect.top) / store.state.zoom;
+    const oldZoom = store.state.zoom;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const next = Math.max(0.1, Math.min(3, oldZoom * factor));
+    if (Math.abs(next - oldZoom) < 0.0001) return;
+    store.setZoom(next);
+    if (scroller) {
+      // 让鼠标下的画布点尽量留在原位
+      scroller.scrollLeft += px * (next - oldZoom);
+      scroller.scrollTop += py * (next - oldZoom);
+    }
+  }, { passive: false });
+
+  /* ---------------- 空格拖拽平移 ---------------- */
+
+  let panning = null;
+
+  function startPan(e) {
+    const scroller = document.getElementById('stageScroll');
+    if (!scroller) return;
+    panning = { sx: e.clientX, sy: e.clientY, sl: scroller.scrollLeft, st: scroller.scrollTop, scroller };
+    window.addEventListener('pointermove', onPanMove);
+    window.addEventListener('pointerup', stopPan, { once: true });
+  }
+
+  function onPanMove(e) {
+    if (!panning) return;
+    panning.scroller.scrollLeft = panning.sl - (e.clientX - panning.sx);
+    panning.scroller.scrollTop = panning.st - (e.clientY - panning.sy);
+  }
+
+  function stopPan() {
+    window.removeEventListener('pointermove', onPanMove);
+    panning = null;
+  }
+
+  /* ---------------- 右键菜单 ---------------- */
+
+  canvasHost.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    // 用事件目标找节点（elementFromPoint 在某些合成事件/缩放场景下不可靠）
+    const nodeEl = e.target && e.target.closest ? e.target.closest('.node') : null;
+    let id = null;
+    if (nodeEl && nodeEl.dataset && nodeEl.dataset.id && store.nodeById(nodeEl.dataset.id)) {
+      id = nodeEl.dataset.id;
+    }
+    if (id && !store.isSelected(id)) store.select([id]);
+    if (ctx.onContextMenu) ctx.onContextMenu(e.clientX, e.clientY, id);
+  });
 
   /* ---------------- 初始化 ---------------- */
 
@@ -4435,6 +4649,7 @@ function buildAssignmentProject() {
 
 
 
+
 /* ---------------- DOM ---------------- */
 const $ = (id) => document.getElementById(id);
 const canvasHost = $('canvasHost');
@@ -4499,7 +4714,8 @@ const canvas = createCanvas({
   nodesLayer,
   hintsLayer,
   store,
-  onInspect(node) { openInspect(node); }
+  onInspect(node) { openInspect(node); },
+  onContextMenu(x, y, nodeId) { openCanvasMenu(x, y, nodeId); }
 });
 
 const handlers = {
@@ -4532,7 +4748,10 @@ function renderAll(reason) {
   $('gridBtn').classList.toggle('on', !!store.state.showGrid);
   $('linkBtn').classList.toggle('on', !!store.state.showLinks);
   $('inspectBtn').classList.toggle('on', !!store.state.inspectMode);
-  canvasHost.style.cursor = store.state.inspectMode ? 'crosshair' : 'default';
+  canvasHost.style.cursor = store.state.inspectMode ? 'crosshair' : (store.state.spacePanning ? 'grab' : 'default');
+
+  const guide = document.getElementById('emptyGuide');
+  if (guide) guide.hidden = store.page.nodes.length > 0;
   void reason;
 }
 
@@ -4600,14 +4819,19 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
   }
   if (act === 'ai') return openAI();
   if (act === 'preset') {
-    if (!confirm('载入课程作业四页示例会覆盖当前项目，继续？')) return;
-    store.loadProject(buildAssignmentProject());
-    renderAll('restore');
-    canvas.fit();
-    toast('已载入作业示例（4 页）');
+    loadAssignmentPreset();
     return;
   }
 });
+
+/** 载入课程作业四页示例 */
+function loadAssignmentPreset() {
+  if (!confirm('载入课程作业四页示例会覆盖当前项目，继续？')) return;
+  store.loadProject(buildAssignmentProject());
+  renderAll('restore');
+  canvas.fit();
+  toast('已载入作业示例（4 页）');
+}
 
 deviceSelect.addEventListener('change', () => {
   store.setDevice(deviceSelect.value);
@@ -4624,12 +4848,32 @@ $('addPage').addEventListener('click', () => {
   if (name) store.addPage(name.trim());
 });
 
+// 空状态引导里的按钮
+const guideEl = document.getElementById('emptyGuide');
+if (guideEl) {
+  guideEl.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t && t.dataset && t.dataset.act === 'preset') loadAssignmentPreset();
+  });
+}
+
 /* ---------------- 键盘 ---------------- */
 window.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
   const meta = e.ctrlKey || e.metaKey;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    store.setSpacePanning(true);
+    return;
+  }
+  if (meta && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    store.select(store.page.nodes.map((n) => n.id));
+    return;
+  }
 
   if (meta && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -4688,8 +4932,11 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-/* ---------------- 拖放组件 ---------------- */
-canvasHost.addEventListener('dragover', (e) => {
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space') store.setSpacePanning(false);
+});
+
+/* ---------------- 拖放组件 ---------------- */canvasHost.addEventListener('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
 });
@@ -4741,6 +4988,63 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 右键菜单 ---------------- */
+function openCanvasMenu(x, y, nodeId) {
+  const node = nodeId ? store.nodeById(nodeId) : null;
+  const sel = store.selectedNodes;
+  const items = [];
+
+  if (node) {
+    items.push({ label: '复制一份', hint: 'Ctrl+D', action: () => store.duplicateSelected() });
+    items.push({ label: '复制', hint: 'Ctrl+C', action: () => { const n = store.copySelected(); if (n) toast('已复制 ' + n + ' 个元素'); } });
+    items.push({ label: '删除', hint: 'Del', danger: true, action: () => store.deleteSelected() });
+    items.push({ divider: true });
+    items.push({ label: '上移一层', action: () => store.bringForward(node.id) });
+    items.push({ label: '下移一层', action: () => store.sendBackward(node.id) });
+    items.push({ label: '置顶', action: () => store.bringToFront(node.id) });
+    items.push({ label: '置底', action: () => store.sendToBack(node.id) });
+    items.push({ divider: true });
+    if (sel.length >= 2) {
+      items.push({
+        label: '组合选中（' + sel.length + ' 个）',
+        hint: 'Ctrl+G',
+        action: () => { const g = store.groupSelected(); if (g) toast('已组合 ' + g.children.length + ' 个元素'); }
+      });
+    }
+    if (node.type === 'group') {
+      items.push({
+        label: '解散分组',
+        hint: 'Ctrl+Shift+G',
+        action: () => { const n = store.ungroupSelected(); if (n) toast('已解散，拆出 ' + n + ' 个元素'); }
+      });
+    }
+    items.push({ label: node.locked ? '解锁' : '锁定', action: () => store.updateNode(node.id, { locked: !node.locked }) });
+    items.push({ label: node.hidden ? '显示' : '隐藏', action: () => store.updateNode(node.id, { hidden: !node.hidden }) });
+  } else {
+    items.push({
+      label: '粘贴',
+      hint: 'Ctrl+V',
+      disabled: !(store.clipboard && store.clipboard.length),
+      action: () => { const n = store.pasteClipboard(); if (n) toast('已粘贴 ' + n + ' 个元素'); }
+    });
+    items.push({ label: '全选', hint: 'Ctrl+A', action: () => store.select(store.page.nodes.map((n) => n.id)) });
+    items.push({ divider: true });
+    items.push({ label: '适应窗口', action: () => canvas.fit() });
+    items.push({
+      label: '清空本页',
+      danger: true,
+      action: () => {
+        if (!store.page.nodes.length) return;
+        if (!confirm('清空本页所有元素？')) return;
+        store.select(store.page.nodes.map((n) => n.id));
+        store.deleteSelected();
+      }
+    });
+  }
+
+  openMenu(x, y, items);
+}
 
 /* ---------------- 标注模式 ---------------- */
 function openInspect(node) {
@@ -4963,8 +5267,11 @@ function seedFirstProject() {
 function boot() {
   fillDeviceSelect();
   const autoPreset = /[?&]preset=(1|demo)/.test(location.search);
+  const autoEmpty = /[?&]empty=1/.test(location.search);
   if (autoPreset) {
     store.loadProject(buildAssignmentProject());
+  } else if (autoEmpty) {
+    // 保持空项目，用于看空状态引导
   } else {
     const loaded = store.loadFromStorage();
     if (!loaded) seedFirstProject();

@@ -98,6 +98,7 @@ export function createCanvas(ctx) {
 
   function onCanvasPointerDown(e) {
     if (e.button !== 0) return;
+    if (store.state.spacePanning) { startPan(e); return; }
     const id = hitTest(e.target);
     if (id) return; // 点到节点，由节点自己处理
 
@@ -163,6 +164,7 @@ export function createCanvas(ctx) {
 
   function onNodePointerDown(e, node) {
     if (e.button !== 0) return;
+    if (store.state.spacePanning) { e.stopPropagation(); startPan(e); return; }
     e.stopPropagation();
     if (store.state.inspectMode) {
       if (ctx.onInspect) ctx.onInspect(node);
@@ -378,6 +380,64 @@ export function createCanvas(ctx) {
     store.persist();
     render();
   }
+
+  /* ---------------- Ctrl+滚轮缩放 ---------------- */
+
+  canvasHost.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const scroller = document.getElementById('stageScroll');
+    const rect = canvasHost.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / store.state.zoom;
+    const py = (e.clientY - rect.top) / store.state.zoom;
+    const oldZoom = store.state.zoom;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const next = Math.max(0.1, Math.min(3, oldZoom * factor));
+    if (Math.abs(next - oldZoom) < 0.0001) return;
+    store.setZoom(next);
+    if (scroller) {
+      // 让鼠标下的画布点尽量留在原位
+      scroller.scrollLeft += px * (next - oldZoom);
+      scroller.scrollTop += py * (next - oldZoom);
+    }
+  }, { passive: false });
+
+  /* ---------------- 空格拖拽平移 ---------------- */
+
+  let panning = null;
+
+  function startPan(e) {
+    const scroller = document.getElementById('stageScroll');
+    if (!scroller) return;
+    panning = { sx: e.clientX, sy: e.clientY, sl: scroller.scrollLeft, st: scroller.scrollTop, scroller };
+    window.addEventListener('pointermove', onPanMove);
+    window.addEventListener('pointerup', stopPan, { once: true });
+  }
+
+  function onPanMove(e) {
+    if (!panning) return;
+    panning.scroller.scrollLeft = panning.sl - (e.clientX - panning.sx);
+    panning.scroller.scrollTop = panning.st - (e.clientY - panning.sy);
+  }
+
+  function stopPan() {
+    window.removeEventListener('pointermove', onPanMove);
+    panning = null;
+  }
+
+  /* ---------------- 右键菜单 ---------------- */
+
+  canvasHost.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    // 用事件目标找节点（elementFromPoint 在某些合成事件/缩放场景下不可靠）
+    const nodeEl = e.target && e.target.closest ? e.target.closest('.node') : null;
+    let id = null;
+    if (nodeEl && nodeEl.dataset && nodeEl.dataset.id && store.nodeById(nodeEl.dataset.id)) {
+      id = nodeEl.dataset.id;
+    }
+    if (id && !store.isSelected(id)) store.select([id]);
+    if (ctx.onContextMenu) ctx.onContextMenu(e.clientX, e.clientY, id);
+  });
 
   /* ---------------- 初始化 ---------------- */
 

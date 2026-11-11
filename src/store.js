@@ -20,6 +20,7 @@ export class Store {
       showGrid: true,
       showLinks: true,
       inspectMode: false,
+      spacePanning: false,
       fitRequested: true
     };
     this.listeners = new Set();
@@ -538,6 +539,13 @@ export class Store {
   /** 标注模式：点元素看规格、导切图 */
   toggleInspect() {
     this.state.inspectMode = !this.state.inspectMode;
+    this.emit('view');
+  }
+
+  /** 空格按住进入平移模式 */
+  setSpacePanning(on) {
+    if (this.state.spacePanning === on) return;
+    this.state.spacePanning = on;
     this.emit('view');
   }
 

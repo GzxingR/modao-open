@@ -12,6 +12,7 @@ import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, b
 import { renderAIPanel, generatePage } from './ai.js';
 import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
 import { downloadProjectPDF } from './pdf.js';
+import { openMenu, hideMenu } from './contextmenu.js';
 import { buildAssignmentProject } from './presets.js';
 
 /* ---------------- DOM ---------------- */
@@ -78,7 +79,8 @@ const canvas = createCanvas({
   nodesLayer,
   hintsLayer,
   store,
-  onInspect(node) { openInspect(node); }
+  onInspect(node) { openInspect(node); },
+  onContextMenu(x, y, nodeId) { openCanvasMenu(x, y, nodeId); }
 });
 
 const handlers = {
@@ -111,7 +113,10 @@ function renderAll(reason) {
   $('gridBtn').classList.toggle('on', !!store.state.showGrid);
   $('linkBtn').classList.toggle('on', !!store.state.showLinks);
   $('inspectBtn').classList.toggle('on', !!store.state.inspectMode);
-  canvasHost.style.cursor = store.state.inspectMode ? 'crosshair' : 'default';
+  canvasHost.style.cursor = store.state.inspectMode ? 'crosshair' : (store.state.spacePanning ? 'grab' : 'default');
+
+  const guide = document.getElementById('emptyGuide');
+  if (guide) guide.hidden = store.page.nodes.length > 0;
   void reason;
 }
 
@@ -179,14 +184,19 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
   }
   if (act === 'ai') return openAI();
   if (act === 'preset') {
-    if (!confirm('载入课程作业四页示例会覆盖当前项目，继续？')) return;
-    store.loadProject(buildAssignmentProject());
-    renderAll('restore');
-    canvas.fit();
-    toast('已载入作业示例（4 页）');
+    loadAssignmentPreset();
     return;
   }
 });
+
+/** 载入课程作业四页示例 */
+function loadAssignmentPreset() {
+  if (!confirm('载入课程作业四页示例会覆盖当前项目，继续？')) return;
+  store.loadProject(buildAssignmentProject());
+  renderAll('restore');
+  canvas.fit();
+  toast('已载入作业示例（4 页）');
+}
 
 deviceSelect.addEventListener('change', () => {
   store.setDevice(deviceSelect.value);
@@ -203,12 +213,32 @@ $('addPage').addEventListener('click', () => {
   if (name) store.addPage(name.trim());
 });
 
+// 空状态引导里的按钮
+const guideEl = document.getElementById('emptyGuide');
+if (guideEl) {
+  guideEl.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t && t.dataset && t.dataset.act === 'preset') loadAssignmentPreset();
+  });
+}
+
 /* ---------------- 键盘 ---------------- */
 window.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
   const meta = e.ctrlKey || e.metaKey;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    store.setSpacePanning(true);
+    return;
+  }
+  if (meta && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    store.select(store.page.nodes.map((n) => n.id));
+    return;
+  }
 
   if (meta && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -267,8 +297,11 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-/* ---------------- 拖放组件 ---------------- */
-canvasHost.addEventListener('dragover', (e) => {
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space') store.setSpacePanning(false);
+});
+
+/* ---------------- 拖放组件 ---------------- */canvasHost.addEventListener('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
 });
@@ -320,6 +353,63 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 右键菜单 ---------------- */
+function openCanvasMenu(x, y, nodeId) {
+  const node = nodeId ? store.nodeById(nodeId) : null;
+  const sel = store.selectedNodes;
+  const items = [];
+
+  if (node) {
+    items.push({ label: '复制一份', hint: 'Ctrl+D', action: () => store.duplicateSelected() });
+    items.push({ label: '复制', hint: 'Ctrl+C', action: () => { const n = store.copySelected(); if (n) toast('已复制 ' + n + ' 个元素'); } });
+    items.push({ label: '删除', hint: 'Del', danger: true, action: () => store.deleteSelected() });
+    items.push({ divider: true });
+    items.push({ label: '上移一层', action: () => store.bringForward(node.id) });
+    items.push({ label: '下移一层', action: () => store.sendBackward(node.id) });
+    items.push({ label: '置顶', action: () => store.bringToFront(node.id) });
+    items.push({ label: '置底', action: () => store.sendToBack(node.id) });
+    items.push({ divider: true });
+    if (sel.length >= 2) {
+      items.push({
+        label: '组合选中（' + sel.length + ' 个）',
+        hint: 'Ctrl+G',
+        action: () => { const g = store.groupSelected(); if (g) toast('已组合 ' + g.children.length + ' 个元素'); }
+      });
+    }
+    if (node.type === 'group') {
+      items.push({
+        label: '解散分组',
+        hint: 'Ctrl+Shift+G',
+        action: () => { const n = store.ungroupSelected(); if (n) toast('已解散，拆出 ' + n + ' 个元素'); }
+      });
+    }
+    items.push({ label: node.locked ? '解锁' : '锁定', action: () => store.updateNode(node.id, { locked: !node.locked }) });
+    items.push({ label: node.hidden ? '显示' : '隐藏', action: () => store.updateNode(node.id, { hidden: !node.hidden }) });
+  } else {
+    items.push({
+      label: '粘贴',
+      hint: 'Ctrl+V',
+      disabled: !(store.clipboard && store.clipboard.length),
+      action: () => { const n = store.pasteClipboard(); if (n) toast('已粘贴 ' + n + ' 个元素'); }
+    });
+    items.push({ label: '全选', hint: 'Ctrl+A', action: () => store.select(store.page.nodes.map((n) => n.id)) });
+    items.push({ divider: true });
+    items.push({ label: '适应窗口', action: () => canvas.fit() });
+    items.push({
+      label: '清空本页',
+      danger: true,
+      action: () => {
+        if (!store.page.nodes.length) return;
+        if (!confirm('清空本页所有元素？')) return;
+        store.select(store.page.nodes.map((n) => n.id));
+        store.deleteSelected();
+      }
+    });
+  }
+
+  openMenu(x, y, items);
+}
 
 /* ---------------- 标注模式 ---------------- */
 function openInspect(node) {
@@ -542,8 +632,11 @@ function seedFirstProject() {
 function boot() {
   fillDeviceSelect();
   const autoPreset = /[?&]preset=(1|demo)/.test(location.search);
+  const autoEmpty = /[?&]empty=1/.test(location.search);
   if (autoPreset) {
     store.loadProject(buildAssignmentProject());
+  } else if (autoEmpty) {
+    // 保持空项目，用于看空状态引导
   } else {
     const loaded = store.loadFromStorage();
     if (!loaded) seedFirstProject();

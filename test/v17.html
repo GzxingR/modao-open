@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>v1.7 test</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>
+  body { margin: 0; background: #14171c; }
+  #stageScroll { width: 500px; height: 420px; overflow: auto; position: relative; }
+  .canvas-wrap { position: relative; }
+</style>
+</head>
+<body>
+<div id="stageScroll">
+  <div class="canvas-wrap" id="wrap">
+    <div class="canvas-host" id="testHost">
+      <div id="testLinks"></div>
+      <div id="testNodes"></div>
+      <div id="testHints"></div>
+    </div>
+  </div>
+</div>
+<pre id="out">running…</pre>
+<script type="module" src="./v17.js"></script>
+</body>
+</html>
