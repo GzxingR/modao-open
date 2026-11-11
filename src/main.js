@@ -16,6 +16,7 @@ import { openMenu, hideMenu } from './contextmenu.js';
 import { initResizers } from './resizer.js';
 import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
 import { renderHelpContent } from './help.js';
+import { loadViewState, saveViewState, captureViewState, applyViewState, restoreScroll } from './viewstate.js';
 
 const APP_VERSION = '2.4.0';
 import { buildAssignmentProject } from './presets.js';
@@ -168,6 +169,7 @@ store.subscribe((state, reason) => {
   if (reason === 'zoom') {
     zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
     canvas.applyZoom();
+    scheduleViewSave();
     return;
   }
   if (reason === 'save') {
@@ -175,7 +177,27 @@ store.subscribe((state, reason) => {
     return;
   }
   renderAll(reason);
+  scheduleViewSave();
 });
+
+/* 视图状态记忆：缩放 / 选中 / 滚动 */
+let viewSaveTimer = null;
+const stageScrollEl = document.getElementById('stageScroll');
+
+function scheduleViewSave() {
+  clearTimeout(viewSaveTimer);
+  viewSaveTimer = setTimeout(() => {
+    saveViewState(captureViewState(store, stageScrollEl));
+  }, 400);
+}
+
+window.addEventListener('beforeunload', () => {
+  saveViewState(captureViewState(store, stageScrollEl));
+});
+
+if (stageScrollEl) {
+  stageScrollEl.addEventListener('scroll', scheduleViewSave, { passive: true });
+}
 
 /* ---------------- 工具栏 ---------------- */
 function fillDeviceSelect() {
@@ -738,15 +760,24 @@ function boot() {
     const loaded = store.loadFromStorage();
     if (!loaded) seedFirstProject();
   }
+  // 恢复上次的缩放与选中（示例/空项目模式不恢复，避免干扰）
+  const view = (autoPreset || autoEmpty) ? null : loadViewState();
+  const restored = view ? applyViewState(store, view) : null;
+
   renderAll('boot');
   initResizers();
+  if (view) restoreScroll(stageScrollEl, view);
 
   if (/[?&]help=1/.test(location.search)) {
     setTimeout(openHelp, 60);
   }
 
   requestAnimationFrame(() => {
-    canvas.fit();
+    if (restored && restored.zoom) {
+      canvas.applyZoom();
+    } else {
+      canvas.fit();
+    }
     zoomLabel.textContent = Math.round(store.state.zoom * 100) + '%';
   });
 

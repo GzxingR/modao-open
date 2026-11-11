@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>v2.5 reload test</title>
+</head>
+<body>
+<pre id="out">running…</pre>
+<script type="module">
+import { loadViewState, saveViewState } from '../src/viewstate.js';
+
+const isSecond = /step=2/.test(location.search);
+const out = document.getElementById('out');
+
+if (!isSecond) {
+  saveViewState({ zoom: 1.5, selection: ['some-id'], scrollLeft: 42, scrollTop: 84 });
+  location.replace(location.pathname + '?step=2');
+} else {
+  const v = loadViewState();
+  const ok = v && v.zoom === 1.5 && v.scrollLeft === 42 && v.scrollTop === 84;
+  out.textContent = 'RESULT ' + (ok ? '1/1' : '0/1') +
+    '\nPASS  ' + (ok ? '真实刷新后视图状态仍在（zoom=' + v.zoom + ', top=' + v.scrollTop + '）' : '刷新后丢了');
+}
+</script>
+</body>
+</html>

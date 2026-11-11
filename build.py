@@ -23,6 +23,7 @@ ORDER = [
     "resizer.js",
     "theme.js",
     "help.js",
+    "viewstate.js",
     "nodes.js",
     "canvas.js",
     "library.js",

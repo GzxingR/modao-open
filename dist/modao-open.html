@@ -2366,6 +2366,70 @@ function renderHelpContent(version) {
   return wrap;
 }
 
+/* ===== src/viewstate.js ===== */
+/**
+ * 视图状态记忆：缩放、选中、滚动位置在刷新后恢复。
+ * 项目本身（含当前页）由 store 的 localStorage 负责。
+ */
+
+const KEY = 'modao-open:view';
+
+function loadViewState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (!raw || typeof raw !== 'object') return null;
+    return {
+      zoom: typeof raw.zoom === 'number' && raw.zoom > 0 ? raw.zoom : null,
+      selection: Array.isArray(raw.selection) ? raw.selection.filter((x) => typeof x === 'string') : [],
+      scrollLeft: Number(raw.scrollLeft) || 0,
+      scrollTop: Number(raw.scrollTop) || 0
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveViewState(view) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(view));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 采集当前视图状态 */
+function captureViewState(store, scroller) {
+  return {
+    zoom: store.state.zoom,
+    selection: (store.state.selection || []).slice(),
+    scrollLeft: scroller ? Math.round(scroller.scrollLeft) : 0,
+    scrollTop: scroller ? Math.round(scroller.scrollTop) : 0
+  };
+}
+
+/**
+ * 把视图状态套到 store 上。选中里已不存在的 id 会被丢掉（避免恢复出幽灵选中）。
+ * 返回实际恢复的信息，便于测试和提示。
+ */
+function applyViewState(store, view) {
+  if (!view) return { zoom: null, selection: [] };
+  let zoom = null;
+  if (typeof view.zoom === 'number' && view.zoom > 0) {
+    store.state.zoom = Math.max(0.1, Math.min(3, view.zoom));
+    zoom = store.state.zoom;
+  }
+  const alive = (view.selection || []).filter((id) => store.nodeById(id));
+  if (alive.length) store.state.selection = alive;
+  return { zoom, selection: alive };
+}
+
+function restoreScroll(scroller, view) {
+  if (!scroller || !view) return;
+  scroller.scrollLeft = Number(view.scrollLeft) || 0;
+  scroller.scrollTop = Number(view.scrollTop) || 0;
+}
+
 /* ===== src/nodes.js ===== */
 /**
  * 节点渲染：把数据模型渲染成真实 DOM（画布与预览共用）
@@ -5747,6 +5811,7 @@ function buildAssignmentProject() {
 
 
 
+
 const APP_VERSION = '2.4.0';
 
 
@@ -5898,6 +5963,7 @@ store.subscribe((state, reason) => {
   if (reason === 'zoom') {
     zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
     canvas.applyZoom();
+    scheduleViewSave();
     return;
   }
   if (reason === 'save') {
@@ -5905,7 +5971,27 @@ store.subscribe((state, reason) => {
     return;
   }
   renderAll(reason);
+  scheduleViewSave();
 });
+
+/* 视图状态记忆：缩放 / 选中 / 滚动 */
+let viewSaveTimer = null;
+const stageScrollEl = document.getElementById('stageScroll');
+
+function scheduleViewSave() {
+  clearTimeout(viewSaveTimer);
+  viewSaveTimer = setTimeout(() => {
+    saveViewState(captureViewState(store, stageScrollEl));
+  }, 400);
+}
+
+window.addEventListener('beforeunload', () => {
+  saveViewState(captureViewState(store, stageScrollEl));
+});
+
+if (stageScrollEl) {
+  stageScrollEl.addEventListener('scroll', scheduleViewSave, { passive: true });
+}
 
 /* ---------------- 工具栏 ---------------- */
 function fillDeviceSelect() {
@@ -6468,15 +6554,24 @@ function boot() {
     const loaded = store.loadFromStorage();
     if (!loaded) seedFirstProject();
   }
+  // 恢复上次的缩放与选中（示例/空项目模式不恢复，避免干扰）
+  const view = (autoPreset || autoEmpty) ? null : loadViewState();
+  const restored = view ? applyViewState(store, view) : null;
+
   renderAll('boot');
   initResizers();
+  if (view) restoreScroll(stageScrollEl, view);
 
   if (/[?&]help=1/.test(location.search)) {
     setTimeout(openHelp, 60);
   }
 
   requestAnimationFrame(() => {
-    canvas.fit();
+    if (restored && restored.zoom) {
+      canvas.applyZoom();
+    } else {
+      canvas.fit();
+    }
     zoomLabel.textContent = Math.round(store.state.zoom * 100) + '%';
   });
 
