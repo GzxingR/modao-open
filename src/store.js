@@ -530,6 +530,37 @@ export class Store {
     this.mutate((project) => { project.name = name; }, { reason: 'meta' });
   }
 
+  /* ---------- 变量 ---------- */
+  ensureVariables() {
+    if (!Array.isArray(this.project.variables)) this.project.variables = [];
+    return this.project.variables;
+  }
+
+  addVariable(name, value) {
+    const v = { id: uid('v'), name: name || ('var' + (this.ensureVariables().length + 1)), value: value == null ? '' : String(value) };
+    this.mutate(() => { this.ensureVariables().push(v); }, { reason: 'vars' });
+    return v;
+  }
+
+  updateVariable(id, patch) {
+    const v = this.ensureVariables().find((x) => x.id === id);
+    if (!v) return;
+    this.mutate(() => {
+      if (patch.name != null) v.name = String(patch.name);
+      if (patch.value != null) v.value = String(patch.value);
+    }, { reason: 'vars' });
+  }
+
+  removeVariable(id) {
+    this.mutate(() => {
+      this.project.variables = this.ensureVariables().filter((x) => x.id !== id);
+    }, { reason: 'vars' });
+  }
+
+  variableById(id) {
+    return this.ensureVariables().find((x) => x.id === id) || null;
+  }
+
   setPageBg(color) {
     this.mutate(() => { this.page.bg = color; }, { reason: 'meta' });
   }

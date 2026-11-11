@@ -15,13 +15,21 @@ import { renderInspector } from '../src/inspector.js';
 
 const s = new Store();
 s.state.project = createProject('预览');
+s.addVariable('agree', '');
+s.addVariable('account', 'guest');
+
 const btn = s.addNode('button', { x: 41, y: 300, w: 320, h: 44, text: '登录' });
-s.addPage('待办列表页');
-s.setActivePage(s.project.pages[0].id);
 const st = s.addState(btn.id, '按下态');
 s.setActiveState(btn.id, st.id);
+s.addPage('待办列表页');
+s.setActivePage(s.project.pages[0].id);
 s.updateNode(btn.id, {
-  link: { action: 'navigate', trigger: 'longpress', targetPageId: s.project.pages[1].id }
+  link: {
+    action: 'navigate',
+    trigger: 'click',
+    targetPageId: s.project.pages[1].id,
+    condition: { varName: 'agree', op: 'eq', value: 'yes' }
+  }
 });
 s.select([btn.id]);
 

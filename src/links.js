@@ -167,6 +167,21 @@ export function renderLinks(layer, store) {
 export function createPreviewRuntime(project, startPageId, mount) {
   let currentPageId = startPageId;
   const hiddenState = new Map();
+  const vars = new Map();
+  for (const v of (project.variables || [])) {
+    vars.set(v.name, String(v.value == null ? '' : v.value));
+  }
+
+  function checkCondition(link) {
+    const c = link.condition;
+    if (!c || !c.varName) return true;
+    const actual = vars.has(c.varName) ? vars.get(c.varName) : '';
+    const expect = c.value == null ? '' : String(c.value);
+    if (c.op === 'truthy') return actual !== '' && actual !== '0' && actual !== 'false';
+    if (c.op === 'falsy') return actual === '' || actual === '0' || actual === 'false';
+    if (c.op === 'neq') return actual !== expect;
+    return actual === expect;
+  }
 
   function pageById(id) {
     return project.pages.find((p) => p.id === id) || project.pages[0];
@@ -200,6 +215,7 @@ export function createPreviewRuntime(project, startPageId, mount) {
     function runAction(node) {
       const link = node.link;
       if (!link || !link.action || link.action === 'none') return;
+      if (!checkCondition(link)) return;
 
       if (link.action === 'navigate') {
         if (link.targetPageId && link.targetPageId !== page.id) {
@@ -212,6 +228,11 @@ export function createPreviewRuntime(project, startPageId, mount) {
 
       if (link.action === 'url') {
         if (link.url) window.open(link.url, '_blank', 'noopener');
+        return;
+      }
+
+      if (link.action === 'setVar') {
+        if (link.varName) vars.set(link.varName, link.varValue == null ? '' : String(link.varValue));
         return;
       }
 
@@ -315,8 +336,13 @@ export function createPreviewRuntime(project, startPageId, mount) {
     restart() {
       currentPageId = startPageId;
       hiddenState.clear();
+      for (const v of (project.variables || [])) {
+        vars.set(v.name, String(v.value == null ? '' : v.value));
+      }
       render();
     },
-    currentPage() { return pageById(currentPageId); }
+    currentPage() { return pageById(currentPageId); },
+    getVar(name) { return vars.has(name) ? vars.get(name) : undefined; },
+    setVar(name, value) { vars.set(name, String(value == null ? '' : value)); }
   };
 }

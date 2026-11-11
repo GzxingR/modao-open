@@ -61,6 +61,7 @@ export const ACTIONS = [
   { value: 'scrollTo', label: '滚动到目标' },
   { value: 'openOverlay', label: '打开浮层' },
   { value: 'closeOverlay', label: '关闭浮层' },
+  { value: 'setVar', label: '设置变量值' },
   { value: 'url', label: '打开链接' }
 ];
 
@@ -318,6 +319,22 @@ export function createPage(name, deviceId = 'iphone17') {
   };
 }
 
+/** 条件运算符 */
+export const CONDITION_OPS = [
+  { value: 'eq', label: '等于' },
+  { value: 'neq', label: '不等于' },
+  { value: 'truthy', label: '为真' },
+  { value: 'falsy', label: '为假' }
+];
+
+export function createVariable(name, value) {
+  return {
+    id: uid('v'),
+    name: name || 'var' + Math.floor(Math.random() * 1000),
+    value: value == null ? '' : String(value)
+  };
+}
+
 export function createProject(name = '未命名原型') {
   const page = createPage('首页');
   return {
@@ -325,6 +342,7 @@ export function createProject(name = '未命名原型') {
     name,
     pages: [page],
     activePageId: page.id,
+    variables: [],
     createdAt: new Date().toISOString()
   };
 }
@@ -357,6 +375,11 @@ export function normalizeProject(raw) {
     name: raw.name || '未命名原型',
     pages,
     activePageId: pages.some((p) => p.id === raw.activePageId) ? raw.activePageId : pages[0].id,
+    variables: Array.isArray(raw.variables) ? raw.variables.map((v) => ({
+      id: v.id || uid('v'),
+      name: String(v.name == null ? 'var' : v.name),
+      value: v.value == null ? '' : String(v.value)
+    })) : [],
     createdAt: raw.createdAt || new Date().toISOString()
   };
 }
