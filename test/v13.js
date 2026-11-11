@@ -42,7 +42,7 @@ function boot(store, mount) {
 
 /* ================= 常量表 ================= */
 await check('触发器与行为表完整', () => {
-  assert(TRIGGERS.length === 10, 'TRIGGERS=' + TRIGGERS.length);
+  assert(TRIGGERS.length === 16, 'TRIGGERS=' + TRIGGERS.length);
   assert(ACTIONS.length === 11, 'ACTIONS=' + ACTIONS.length);
   const names = TRIGGERS.map((t) => t.value).join(',');
   assert(names.indexOf('longpress') >= 0 && names.indexOf('swipeLeft') >= 0 && names.indexOf('load') >= 0, names);

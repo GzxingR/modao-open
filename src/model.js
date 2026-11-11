@@ -41,12 +41,18 @@ export const TRIGGERS = [
   { value: 'click', label: '单击' },
   { value: 'dblclick', label: '双击' },
   { value: 'longpress', label: '长按' },
+  { value: 'down', label: '按下' },
+  { value: 'up', label: '抬起' },
   { value: 'mouseenter', label: '鼠标移入' },
   { value: 'mouseleave', label: '鼠标移出' },
+  { value: 'contextmenu', label: '右键' },
+  { value: 'keydown', label: '键盘按键' },
   { value: 'swipeLeft', label: '左滑' },
   { value: 'swipeRight', label: '右滑' },
   { value: 'swipeUp', label: '上滑' },
   { value: 'swipeDown', label: '下滑' },
+  { value: 'watch', label: '监听变量变化' },
+  { value: 'shake', label: '摇一摇' },
   { value: 'load', label: '载入时' }
 ];
 

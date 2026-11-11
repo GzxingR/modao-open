@@ -437,6 +437,17 @@ export function renderInspector(container, store, handlers) {
     el('span', { class: 'group-title', text: '触发', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
     triggerSelect
   ]));
+
+  if (currentTrigger === 'keydown') {
+    const keyInput = el('input', { type: 'text', value: (node.link && node.link.keyName) || 'Enter' });
+    keyInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+    keyInput.placeholder = 'Enter / Escape / a …';
+    keyInput.addEventListener('change', () => {
+      const next = Object.assign({}, node.link || { action: 'navigate' }, { keyName: keyInput.value.trim() || 'Enter' });
+      handlers.update(node.id, { link: next });
+    });
+    linkRows.push(el('div', { class: 'row' }, [keyInput]));
+  }
   linkRows.push(el('div', { class: 'row' }, [
     el('span', { class: 'group-title', text: '行为', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
     actionSelect

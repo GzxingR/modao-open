@@ -879,12 +879,18 @@ const TRIGGERS = [
   { value: 'click', label: '单击' },
   { value: 'dblclick', label: '双击' },
   { value: 'longpress', label: '长按' },
+  { value: 'down', label: '按下' },
+  { value: 'up', label: '抬起' },
   { value: 'mouseenter', label: '鼠标移入' },
   { value: 'mouseleave', label: '鼠标移出' },
+  { value: 'contextmenu', label: '右键' },
+  { value: 'keydown', label: '键盘按键' },
   { value: 'swipeLeft', label: '左滑' },
   { value: 'swipeRight', label: '右滑' },
   { value: 'swipeUp', label: '上滑' },
   { value: 'swipeDown', label: '下滑' },
+  { value: 'watch', label: '监听变量变化' },
+  { value: 'shake', label: '摇一摇' },
   { value: 'load', label: '载入时' }
 ];
 
@@ -3538,6 +3544,17 @@ function renderInspector(container, store, handlers) {
     el('span', { class: 'group-title', text: '触发', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
     triggerSelect
   ]));
+
+  if (currentTrigger === 'keydown') {
+    const keyInput = el('input', { type: 'text', value: (node.link && node.link.keyName) || 'Enter' });
+    keyInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+    keyInput.placeholder = 'Enter / Escape / a …';
+    keyInput.addEventListener('change', () => {
+      const next = Object.assign({}, node.link || { action: 'navigate' }, { keyName: keyInput.value.trim() || 'Enter' });
+      handlers.update(node.id, { link: next });
+    });
+    linkRows.push(el('div', { class: 'row' }, [keyInput]));
+  }
   linkRows.push(el('div', { class: 'row' }, [
     el('span', { class: 'group-title', text: '行为', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
     actionSelect
@@ -3880,18 +3897,41 @@ const LONG_PRESS_MS = 500;
 const SWIPE_MIN = 30;
 
 /** 给预览/导出用的触发器绑定；fire 是真正的行为执行函数 */
-function bindTriggers(el, link, fire) {
+function bindTriggers(el, link, fire, registerCleanup) {
   const trigger = (link && link.trigger) || 'click';
+  const cleanup = registerCleanup || function () {};
   el.style.cursor = 'pointer';
 
   if (trigger === 'click') {
     el.addEventListener('click', (e) => { e.stopPropagation(); fire(); });
   } else if (trigger === 'dblclick') {
     el.addEventListener('dblclick', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'down') {
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'up') {
+    el.addEventListener('pointerup', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'contextmenu') {
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); fire(); });
   } else if (trigger === 'mouseenter') {
     el.addEventListener('mouseenter', () => fire());
   } else if (trigger === 'mouseleave') {
     el.addEventListener('mouseleave', () => fire());
+  } else if (trigger === 'keydown') {
+    const want = link.keyName || 'Enter';
+    const handler = (e) => {
+      if (e.key === want || e.code === want) fire();
+    };
+    window.addEventListener('keydown', handler);
+    cleanup(() => window.removeEventListener('keydown', handler));
+  } else if (trigger === 'shake') {
+    const handler = (ev) => {
+      const a = ev.accelerationIncludingGravity || ev.acceleration;
+      if (!a) return;
+      const magnitude = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+      if (magnitude > 35) fire();
+    };
+    window.addEventListener('devicemotion', handler);
+    cleanup(() => window.removeEventListener('devicemotion', handler));
   } else if (trigger === 'longpress') {
     let timer = null;
     const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
@@ -4037,6 +4077,8 @@ function createPreviewRuntime(project, startPageId, mount) {
   let currentPageId = startPageId;
   const hiddenState = new Map();
   const vars = new Map();
+  const cleanups = [];
+  let watchDepth = 0;
   for (const v of (project.variables || [])) {
     vars.set(v.name, String(v.value == null ? '' : v.value));
   }
@@ -4057,6 +4099,9 @@ function createPreviewRuntime(project, startPageId, mount) {
   }
 
   function render() {
+    while (cleanups.length) {
+      try { cleanups.pop()(); } catch (e) { /* 忽略 */ }
+    }
     const page = pageById(currentPageId);
     mount.textContent = '';
 
@@ -4102,6 +4147,7 @@ function createPreviewRuntime(project, startPageId, mount) {
 
       if (link.action === 'setVar') {
         if (link.varName) vars.set(link.varName, link.varValue == null ? '' : String(link.varValue));
+        runWatchers();
         return;
       }
 
@@ -4149,13 +4195,33 @@ function createPreviewRuntime(project, startPageId, mount) {
       }
     }
 
+    function runWatchers() {
+      if (watchDepth > 3) return;
+      watchDepth += 1;
+      try {
+        const pg = pageById(currentPageId);
+        for (const n of pg.nodes) {
+          if (!n.link || !n.link.action || n.link.action === 'none') continue;
+          if ((n.link.trigger || 'click') !== 'watch') continue;
+          if (checkCondition(n.link)) runAction(n);
+        }
+      } finally {
+        watchDepth -= 1;
+      }
+    }
+
     function attach(node, el) {
       const link = node.link;
-      if (link && link.action && link.action !== 'none' && (link.trigger || 'click') !== 'load') {
-        bindTriggers(el, link, () => runAction(node));
-      } else {
+      if (!link || !link.action || link.action === 'none') {
         el.style.cursor = 'default';
+        return;
       }
+      const trigger = link.trigger || 'click';
+      if (trigger === 'load' || trigger === 'watch') {
+        el.style.cursor = 'default';
+        return;
+      }
+      bindTriggers(el, link, () => runAction(node), (fn) => cleanups.push(fn));
     }
 
     const overlays = [];
@@ -4212,7 +4278,12 @@ function createPreviewRuntime(project, startPageId, mount) {
     },
     currentPage() { return pageById(currentPageId); },
     getVar(name) { return vars.has(name) ? vars.get(name) : undefined; },
-    setVar(name, value) { vars.set(name, String(value == null ? '' : value)); }
+    setVar(name, value) { vars.set(name, String(value == null ? '' : value)); },
+    destroy() {
+      while (cleanups.length) {
+        try { cleanups.pop()(); } catch (e) { /* 忽略 */ }
+      }
+    }
   };
 }
 
@@ -4527,6 +4598,7 @@ function nodeHtml(node, overrideStateId) {
     el.dataset.co = link.condition.op || 'truthy';
     if (link.condition.value != null) el.dataset.cval = String(link.condition.value);
   }
+  if (link && link.keyName) el.dataset.lk = String(link.keyName);
   if (link && link.varName) {
     el.dataset.vn = link.varName;
     el.dataset.vv = link.varValue == null ? '' : String(link.varValue);
@@ -4619,6 +4691,21 @@ const RUNTIME = `
       el.addEventListener('click', function (e) { e.stopPropagation(); fire(); });
     } else if (t === 'dblclick') {
       el.addEventListener('dblclick', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'down') {
+      el.addEventListener('pointerdown', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'up') {
+      el.addEventListener('pointerup', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'contextmenu') {
+      el.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); fire(); });
+    } else if (t === 'keydown') {
+      var want = el.dataset.lk || 'Enter';
+      window.addEventListener('keydown', function (e) { if (e.key === want || e.code === want) fire(); });
+    } else if (t === 'shake') {
+      window.addEventListener('devicemotion', function (ev) {
+        var a = ev.accelerationIncludingGravity || ev.acceleration;
+        if (!a) return;
+        if (Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0) > 35) fire();
+      });
     } else if (t === 'mouseenter') {
       el.addEventListener('mouseenter', fire);
     } else if (t === 'mouseleave') {
@@ -4670,6 +4757,7 @@ const RUNTIME = `
     if (!checkCond(el)) return;
     if (act === 'setVar') {
       if (el.dataset.vn) vars[el.dataset.vn] = (el.dataset.vv == null ? '' : el.dataset.vv);
+      runWatchers(box, p);
       return;
     }
     if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
@@ -4711,6 +4799,13 @@ const RUNTIME = `
       if (ovMask) ovMask.style.display = showOv ? '' : 'none';
     }
     else if (act === 'scrollTo' && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function runWatchers(box, p) {
+    var list = box.querySelectorAll('[data-t="watch"]');
+    Array.prototype.forEach.call(list, function (el) {
+      if (checkCond(el)) run(el, box, p);
+    });
   }
 
   function show(id) {
@@ -5656,7 +5751,11 @@ function openPreview() {
   mask._runtime = runtime;
 }
 
-$('previewClose').addEventListener('click', () => { $('previewMask').hidden = true; });
+$('previewClose').addEventListener('click', () => {
+  const mask = $('previewMask');
+  if (mask._runtime && mask._runtime.destroy) mask._runtime.destroy();
+  mask.hidden = true;
+});
 $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();

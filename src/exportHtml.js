@@ -40,6 +40,7 @@ function nodeHtml(node, overrideStateId) {
     el.dataset.co = link.condition.op || 'truthy';
     if (link.condition.value != null) el.dataset.cval = String(link.condition.value);
   }
+  if (link && link.keyName) el.dataset.lk = String(link.keyName);
   if (link && link.varName) {
     el.dataset.vn = link.varName;
     el.dataset.vv = link.varValue == null ? '' : String(link.varValue);
@@ -132,6 +133,21 @@ const RUNTIME = `
       el.addEventListener('click', function (e) { e.stopPropagation(); fire(); });
     } else if (t === 'dblclick') {
       el.addEventListener('dblclick', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'down') {
+      el.addEventListener('pointerdown', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'up') {
+      el.addEventListener('pointerup', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'contextmenu') {
+      el.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); fire(); });
+    } else if (t === 'keydown') {
+      var want = el.dataset.lk || 'Enter';
+      window.addEventListener('keydown', function (e) { if (e.key === want || e.code === want) fire(); });
+    } else if (t === 'shake') {
+      window.addEventListener('devicemotion', function (ev) {
+        var a = ev.accelerationIncludingGravity || ev.acceleration;
+        if (!a) return;
+        if (Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0) > 35) fire();
+      });
     } else if (t === 'mouseenter') {
       el.addEventListener('mouseenter', fire);
     } else if (t === 'mouseleave') {
@@ -183,6 +199,7 @@ const RUNTIME = `
     if (!checkCond(el)) return;
     if (act === 'setVar') {
       if (el.dataset.vn) vars[el.dataset.vn] = (el.dataset.vv == null ? '' : el.dataset.vv);
+      runWatchers(box, p);
       return;
     }
     if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
@@ -224,6 +241,13 @@ const RUNTIME = `
       if (ovMask) ovMask.style.display = showOv ? '' : 'none';
     }
     else if (act === 'scrollTo' && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function runWatchers(box, p) {
+    var list = box.querySelectorAll('[data-t="watch"]');
+    Array.prototype.forEach.call(list, function (el) {
+      if (checkCond(el)) run(el, box, p);
+    });
   }
 
   function show(id) {

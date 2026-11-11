@@ -11,18 +11,41 @@ const LONG_PRESS_MS = 500;
 const SWIPE_MIN = 30;
 
 /** 给预览/导出用的触发器绑定；fire 是真正的行为执行函数 */
-export function bindTriggers(el, link, fire) {
+export function bindTriggers(el, link, fire, registerCleanup) {
   const trigger = (link && link.trigger) || 'click';
+  const cleanup = registerCleanup || function () {};
   el.style.cursor = 'pointer';
 
   if (trigger === 'click') {
     el.addEventListener('click', (e) => { e.stopPropagation(); fire(); });
   } else if (trigger === 'dblclick') {
     el.addEventListener('dblclick', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'down') {
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'up') {
+    el.addEventListener('pointerup', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'contextmenu') {
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); fire(); });
   } else if (trigger === 'mouseenter') {
     el.addEventListener('mouseenter', () => fire());
   } else if (trigger === 'mouseleave') {
     el.addEventListener('mouseleave', () => fire());
+  } else if (trigger === 'keydown') {
+    const want = link.keyName || 'Enter';
+    const handler = (e) => {
+      if (e.key === want || e.code === want) fire();
+    };
+    window.addEventListener('keydown', handler);
+    cleanup(() => window.removeEventListener('keydown', handler));
+  } else if (trigger === 'shake') {
+    const handler = (ev) => {
+      const a = ev.accelerationIncludingGravity || ev.acceleration;
+      if (!a) return;
+      const magnitude = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+      if (magnitude > 35) fire();
+    };
+    window.addEventListener('devicemotion', handler);
+    cleanup(() => window.removeEventListener('devicemotion', handler));
   } else if (trigger === 'longpress') {
     let timer = null;
     const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
@@ -168,6 +191,8 @@ export function createPreviewRuntime(project, startPageId, mount) {
   let currentPageId = startPageId;
   const hiddenState = new Map();
   const vars = new Map();
+  const cleanups = [];
+  let watchDepth = 0;
   for (const v of (project.variables || [])) {
     vars.set(v.name, String(v.value == null ? '' : v.value));
   }
@@ -188,6 +213,9 @@ export function createPreviewRuntime(project, startPageId, mount) {
   }
 
   function render() {
+    while (cleanups.length) {
+      try { cleanups.pop()(); } catch (e) { /* 忽略 */ }
+    }
     const page = pageById(currentPageId);
     mount.textContent = '';
 
@@ -233,6 +261,7 @@ export function createPreviewRuntime(project, startPageId, mount) {
 
       if (link.action === 'setVar') {
         if (link.varName) vars.set(link.varName, link.varValue == null ? '' : String(link.varValue));
+        runWatchers();
         return;
       }
 
@@ -280,13 +309,33 @@ export function createPreviewRuntime(project, startPageId, mount) {
       }
     }
 
+    function runWatchers() {
+      if (watchDepth > 3) return;
+      watchDepth += 1;
+      try {
+        const pg = pageById(currentPageId);
+        for (const n of pg.nodes) {
+          if (!n.link || !n.link.action || n.link.action === 'none') continue;
+          if ((n.link.trigger || 'click') !== 'watch') continue;
+          if (checkCondition(n.link)) runAction(n);
+        }
+      } finally {
+        watchDepth -= 1;
+      }
+    }
+
     function attach(node, el) {
       const link = node.link;
-      if (link && link.action && link.action !== 'none' && (link.trigger || 'click') !== 'load') {
-        bindTriggers(el, link, () => runAction(node));
-      } else {
+      if (!link || !link.action || link.action === 'none') {
         el.style.cursor = 'default';
+        return;
       }
+      const trigger = link.trigger || 'click';
+      if (trigger === 'load' || trigger === 'watch') {
+        el.style.cursor = 'default';
+        return;
+      }
+      bindTriggers(el, link, () => runAction(node), (fn) => cleanups.push(fn));
     }
 
     const overlays = [];
@@ -343,6 +392,11 @@ export function createPreviewRuntime(project, startPageId, mount) {
     },
     currentPage() { return pageById(currentPageId); },
     getVar(name) { return vars.has(name) ? vars.get(name) : undefined; },
-    setVar(name, value) { vars.set(name, String(value == null ? '' : value)); }
+    setVar(name, value) { vars.set(name, String(value == null ? '' : value)); },
+    destroy() {
+      while (cleanups.length) {
+        try { cleanups.pop()(); } catch (e) { /* 忽略 */ }
+      }
+    }
   };
 }

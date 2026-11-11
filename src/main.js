@@ -366,7 +366,11 @@ function openPreview() {
   mask._runtime = runtime;
 }
 
-$('previewClose').addEventListener('click', () => { $('previewMask').hidden = true; });
+$('previewClose').addEventListener('click', () => {
+  const mask = $('previewMask');
+  if (mask._runtime && mask._runtime.destroy) mask._runtime.destroy();
+  mask.hidden = true;
+});
 $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
