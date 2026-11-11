@@ -1,0 +1,11 @@
+{
+  "name": "modao-open",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "开源的移动端原型设计工作台（墨刀核心功能复刻，自带 API Key 接 AI）",
+  "license": "MIT",
+  "scripts": {
+    "start": "python -m http.server 8788"
+  }
+}

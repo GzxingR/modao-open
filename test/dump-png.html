@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>dump png</title>
+<style>
+  body { margin: 0; background: #14171c; color: #e6e8ec; font: 13px "Microsoft YaHei", sans-serif; padding: 16px; }
+  h3 { margin: 0 0 10px; font-size: 13px; color: #9aa3af; font-weight: 400; }
+  .row { display: flex; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { font-size: 12px; color: #9aa3af; margin-top: 6px; }
+  img { display: block; box-shadow: 0 6px 24px rgba(0,0,0,.5); background: #fff; }
+</style>
+</head>
+<body>
+<h3>导出的 PNG（真实经过 SVG → canvas → toDataURL，非截图）</h3>
+<div class="row" id="row"></div>
+<script type="module" src="./dump-png.js"></script>
+</body>
+</html>

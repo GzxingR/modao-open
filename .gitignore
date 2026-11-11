@@ -1,0 +1,20 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# logs
+*.log
+
+# local scratch
+_shot*.png
+.preview/
+
+# deps (this project has none, but keep it safe)
+node_modules/
+pnpm-lock.yaml

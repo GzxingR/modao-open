@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>墨刀开源版 · Modao Open</title>
+<link rel="stylesheet" href="./css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='2.5' width='16' height='19' rx='2.5' fill='%231677ff'/><rect x='7.5' y='11' width='9' height='3.4' rx='1' fill='white'/><rect x='7.5' y='16' width='9' height='3.4' rx='1' fill='white'/></svg>">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="2.5" width="16" height="19" rx="2.5" fill="#1677ff"/>
+        <rect x="7.5" y="7.5" width="9" height="2.6" rx="1" fill="#fff"/>
+        <rect x="7.5" y="12" width="9" height="3.4" rx="1" fill="#fff"/>
+        <rect x="7.5" y="17" width="9" height="2.2" rx="1" fill="#fff"/>
+      </svg>
+      <input id="projectName" class="project-name" value="未命名原型" spellcheck="false">
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      <button class="tb" data-act="undo" title="撤销 Ctrl+Z">撤销</button>
+      <button class="tb" data-act="redo" title="重做 Ctrl+Shift+Z">重做</button>
+      <span class="sep"></span>
+      <select id="deviceSelect" class="tb-select" title="画布设备"></select>
+      <span class="sep"></span>
+      <button class="tb" data-act="zoom-out" title="缩小">−</button>
+      <span id="zoomLabel" class="zoom-label">100%</span>
+      <button class="tb" data-act="zoom-in" title="放大">＋</button>
+      <button class="tb" data-act="zoom-fit" title="适应窗口">适应</button>
+      <span class="sep"></span>
+      <button class="tb" data-act="toggle-grid" title="网格/参考线" id="gridBtn">参考线</button>
+      <button class="tb" data-act="toggle-links" title="显示交互连线" id="linkBtn">连线</button>
+    </div>
+
+    <div class="right-actions">
+      <button class="tb" data-act="preset" title="载入课程作业四页示例">作业示例</button>
+      <button class="tb ai" data-act="ai" title="AI 生成（自带 API Key）">AI 生成</button>
+      <button class="tb" data-act="preview" title="预览演示">预览</button>
+      <button class="tb" data-act="spec" title="生成规格清单">规格</button>
+      <button class="tb" data-act="export-png" title="导出当前页 PNG">导出 PNG</button>
+      <button class="tb" data-act="save" title="保存到本地文件">保存</button>
+      <button class="tb" data-act="open" title="打开项目文件">打开</button>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <aside class="left">
+      <div class="pane-title">
+        <span>页面</span>
+        <button class="mini" id="addPage" title="新建页面">＋</button>
+      </div>
+      <div id="pageList" class="page-list"></div>
+
+      <div class="pane-title">
+        <span>组件</span>
+      </div>
+      <div id="library" class="library"></div>
+    </aside>
+
+    <main class="stage" id="stage">
+      <div class="stage-scroll" id="stageScroll">
+        <div class="canvas-wrap" id="canvasWrap">
+          <div class="canvas-host" id="canvasHost">
+            <div class="links-layer" id="linksLayer"></div>
+            <div class="nodes-layer" id="nodesLayer"></div>
+            <div class="hints-layer" id="hintsLayer"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <div class="pane-title"><span>属性</span></div>
+      <div id="inspector" class="inspector"></div>
+    </aside>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong id="modalTitle">标题</strong>
+        <button class="mini" id="modalClose">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <div id="previewMask" class="preview-mask" hidden>
+    <div class="preview-frame">
+      <div class="preview-toolbar">
+        <span id="previewDevice">预览</span>
+        <span class="spacer"></span>
+        <button class="mini" id="previewRestart">重播</button>
+        <button class="mini" id="previewClose">关闭</button>
+      </div>
+      <div id="previewHost" class="preview-host"></div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
