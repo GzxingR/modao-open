@@ -5,7 +5,7 @@
  */
 
 import { createNodeEl } from './nodes.js';
-import { getDevice } from './model.js';
+import { resolveDevice } from './model.js';
 
 function escapeAttr(v) {
   return String(v == null ? '' : v)
@@ -31,7 +31,7 @@ function nodeHtml(node, overrideStateId) {
 }
 
 function pagePayload(page) {
-  const device = getDevice(page.deviceId);
+  const device = resolveDevice(page);
   const nodes = [];
   for (const node of page.nodes) {
     if (node.hidden) continue;

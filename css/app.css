@@ -168,6 +168,29 @@ body {
 .lib-item:hover { border-color: var(--accent); color: var(--text); }
 .lib-item svg { opacity: .9; }
 
+.layer-list { max-height: 26%; overflow: auto; padding: 0 6px 8px; }
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.layer-item:hover { background: var(--bg-panel-2); color: var(--text); }
+.layer-item.active { background: #17304f; color: #cfe2ff; }
+.layer-item.is-hidden { opacity: .45; }
+.layer-item .l-icon { width: 14px; text-align: center; opacity: .8; font-size: 11px; flex: 0 0 14px; }
+.layer-item .l-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-item .l-btn {
+  width: 18px; height: 18px; line-height: 14px; font-size: 10px;
+  border: none; background: transparent; color: inherit; opacity: .55; padding: 0;
+}
+.layer-item .l-btn:hover { opacity: 1; }
+
 /* ---------- stage ---------- */
 .stage {
   flex: 1;

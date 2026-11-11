@@ -93,14 +93,71 @@ export function createCanvas(ctx) {
     return null;
   }
 
+  let marquee = null;
+
   function onCanvasPointerDown(e) {
-    if (e.target !== canvasHost && !e.target.classList.contains('nodes-layer') && !e.target.classList.contains('hints-layer')) {
-      // 点到节点由节点自己的 handler 处理
-      const id = hitTest(e.target);
-      if (id) return;
+    if (e.button !== 0) return;
+    const id = hitTest(e.target);
+    if (id) return; // 点到节点，由节点自己处理
+
+    // 点到空白：立即清空选择（shift 保留，用于框选追加）
+    if (!e.shiftKey) store.clearSelection();
+
+    const rect = canvasHost.getBoundingClientRect();
+    const zoom = store.state.zoom;
+    const sx = (e.clientX - rect.left) / zoom;
+    const sy = (e.clientY - rect.top) / zoom;
+    marquee = { sx, sy, cx: sx, cy: sy, additive: !!e.shiftKey, box: null, moved: false };
+    window.addEventListener('pointermove', onMarqueeMove);
+    window.addEventListener('pointerup', onMarqueeUp, { once: true });
+  }
+
+  function onMarqueeMove(e) {
+    if (!marquee) return;
+    const rect = canvasHost.getBoundingClientRect();
+    const zoom = store.state.zoom;
+    marquee.cx = (e.clientX - rect.left) / zoom;
+    marquee.cy = (e.clientY - rect.top) / zoom;
+    if (Math.abs(marquee.cx - marquee.sx) > 3 || Math.abs(marquee.cy - marquee.sy) > 3) marquee.moved = true;
+    if (!marquee.moved) return;
+
+    if (!marquee.box) {
+      const box = document.createElement('div');
+      box.style.position = 'absolute';
+      box.style.border = '1px dashed #1677ff';
+      box.style.background = 'rgba(22,119,255,0.08)';
+      box.style.pointerEvents = 'none';
+      box.style.zIndex = '8';
+      hintsLayer.appendChild(box);
+      marquee.box = box;
     }
-    store.clearSelection();
-    render();
+    const x = Math.min(marquee.sx, marquee.cx);
+    const y = Math.min(marquee.sy, marquee.cy);
+    marquee.box.style.left = x + 'px';
+    marquee.box.style.top = y + 'px';
+    marquee.box.style.width = Math.abs(marquee.cx - marquee.sx) + 'px';
+    marquee.box.style.height = Math.abs(marquee.cy - marquee.sy) + 'px';
+  }
+
+  function onMarqueeUp() {
+    window.removeEventListener('pointermove', onMarqueeMove);
+    if (!marquee) return;
+    const m = marquee;
+    marquee = null;
+    if (m.box) m.box.remove();
+
+    if (!m.moved) {
+      return; // 只是单击空白，上面已经在 pointerdown 时清空了选择
+    }
+
+    const x1 = Math.min(m.sx, m.cx);
+    const x2 = Math.max(m.sx, m.cx);
+    const y1 = Math.min(m.sy, m.cy);
+    const y2 = Math.max(m.sy, m.cy);
+    const hits = store.page.nodes
+      .filter((n) => !n.hidden && !(n.x > x2 || n.x + n.w < x1 || n.y > y2 || n.y + n.h < y1))
+      .map((n) => n.id);
+    store.select(hits, m.additive);
   }
 
   function onNodePointerDown(e, node) {

@@ -98,6 +98,16 @@ export function createNodeEl(node, opts = {}) {
       break;
     }
     case 'image': {
+      if (node.src) {
+        const img = document.createElement('img');
+        img.src = node.src;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = node.fit || 'cover';
+        img.style.display = 'block';
+        el.appendChild(img);
+        break;
+      }
       el.style.display = 'flex';
       el.style.flexDirection = 'column';
       el.style.alignItems = 'center';

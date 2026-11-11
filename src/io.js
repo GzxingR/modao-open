@@ -3,7 +3,7 @@
  */
 
 import { renderPage } from './nodes.js';
-import { getDevice } from './model.js';
+import { getDevice, resolveDevice } from './model.js';
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -22,7 +22,7 @@ function safeName(s) {
  * 把页面渲染成 PNG dataURL（2 倍图）。导出与自测共用。
  */
 export async function renderPageToDataURL(page) {
-  const device = getDevice(page.deviceId);
+  const device = resolveDevice(page);
   const host = renderPage(page, { device });
 
   host.style.width = device.w + 'px';
@@ -96,8 +96,38 @@ export function exportProjectJSON(project) {
   downloadBlob(new Blob([text], { type: 'application/json' }), safeName(project.name) + '.modao.json');
 }
 
-export function readProjectFile(file) {
+/**
+ * 读入图片文件并压缩成 dataURL（最长边 maxEdge，JPEG 质量 quality）。
+ * 压缩是为了让项目 JSON 和 localStorage 别被撑爆。
+ */
+export function compressImageFile(file, maxEdge = 900, quality = 0.82) {
   return new Promise((resolve, reject) => {
+    if (!file) { reject(new Error('没有文件')); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const g = canvas.getContext('2d');
+          g.drawImage(img, 0, 0, w, h);
+          resolve({ dataUrl: canvas.toDataURL('image/jpeg', quality), width: w, height: h, bytes: file.size });
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('图片解码失败'));
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+export function readProjectFile(file) {  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       try { resolve(JSON.parse(String(reader.result))); } catch (e) { reject(new Error('不是合法的 JSON 项目文件')); }
@@ -109,7 +139,7 @@ export function readProjectFile(file) {
 
 /** 生成人可读的规格清单，可直接贴进作业答案 */
 export function buildSpecText(page, projectName) {
-  const device = getDevice(page.deviceId);
+  const device = resolveDevice(page);
   const lines = [];
   lines.push('【' + (projectName || '原型') + ' · ' + page.name + '】');
   lines.push('画布：' + device.label + '（' + device.w + '×' + device.h + '）');

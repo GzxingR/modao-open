@@ -96,7 +96,10 @@ check('拖手柄改变尺寸', () => {
 check('点空白取消选择', () => {
   rect(host);
   canvas.render();
+  store.select([store.page.nodes[0].id]);
+  assert(store.state.selection.length === 1, '前置选择失败');
   host.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5, pointerId: 1, button: 0 }));
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5, pointerId: 1 }));
   assert(store.state.selection.length === 0, '选择没被清空');
   return 'ok';
 });

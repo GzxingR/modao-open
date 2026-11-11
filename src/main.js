@@ -5,7 +5,7 @@
 import { store } from './store.js';
 import { DEVICES, getDevice, createNode } from './model.js';
 import { createCanvas } from './canvas.js';
-import { renderPageList, renderLibrary } from './library.js';
+import { renderPageList, renderLibrary, renderLayerList } from './library.js';
 import { renderInspector } from './inspector.js';
 import { renderLinks, createPreviewRuntime } from './links.js';
 import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, buildSpecText } from './io.js';
@@ -95,6 +95,7 @@ function renderAll(reason) {
   projectNameInput.value = store.project.name;
   deviceSelect.value = store.page.deviceId;
   renderPageList(pageListEl, store, handlers);
+  renderLayerList(document.getElementById('layerList'), store, handlers);
   renderLibrary(libraryEl, store, handlers);
   canvas.render();
   renderLinks(linksLayer, store);

@@ -2,7 +2,8 @@
  * 右侧属性面板
  */
 
-import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS } from './model.js';
+import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice } from './model.js';
+import { compressImageFile } from './io.js';
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -110,6 +111,16 @@ export function renderInspector(container, store, handlers) {
     devSelect.addEventListener('change', () => store.setDevice(devSelect.value));
     const devWrap = el('div', { class: 'row' }, [devSelect]);
     pageRows.push(el('div', { class: 'row' }, [el('span', { class: 'group-title', text: '画布设备', style: { margin: '0 8px 0 0' } }), devWrap]));
+    pageRows.push(el('div', { class: 'row' }, [
+      numField('宽', dev.w, (v) => store.setCustomSize(v, store.device.h), { min: 120 }),
+      numField('高', dev.h, (v) => store.setCustomSize(store.device.w, v), { min: 200 })
+    ]));
+    if (store.page.customW) {
+      const resetBtn = el('button', { class: 'tb', text: '恢复预设尺寸' });
+      resetBtn.style.width = '100%';
+      resetBtn.addEventListener('click', () => store.clearCustomSize());
+      pageRows.push(el('div', { class: 'row' }, [resetBtn]));
+    }
     pageRows.push(el('div', { class: 'row' }, [colorField('背景', store.page.bg || '#ffffff', (v) => store.setPageBg(v))]));
 
     container.appendChild(group('页面', pageRows));
@@ -214,6 +225,44 @@ export function renderInspector(container, store, handlers) {
 
   /* ---------- 组件特有 ---------- */
   const specific = [];
+
+  if (node.type === 'image') {
+    const upBtn = el('button', { class: 'tb', text: node.src ? '更换图片' : '上传图片' });
+    upBtn.style.width = '100%';
+    upBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.addEventListener('change', async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        try {
+          const r = await compressImageFile(file, 900, 0.82);
+          handlers.update(node.id, { src: r.dataUrl, text: '' });
+          handlers.toast('已插入图片 ' + r.width + '×' + r.height + '（' + Math.round(r.dataUrl.length / 1024) + ' KB）');
+        } catch (e) {
+          handlers.toast('图片处理失败：' + e.message);
+        }
+      });
+      input.click();
+    });
+    specific.push(el('div', { class: 'row' }, [upBtn]));
+
+    if (node.src) {
+      const clrBtn = el('button', { class: 'tb', text: '清除图片' });
+      clrBtn.style.width = '100%';
+      clrBtn.addEventListener('click', () => handlers.update(node.id, { src: '' }));
+      specific.push(el('div', { class: 'row' }, [clrBtn]));
+    }
+
+    specific.push(el('div', { class: 'row' }, [
+      seg([
+        { label: '裁剪铺满', value: 'cover' },
+        { label: '完整显示', value: 'contain' }
+      ], node.fit || 'cover', (v) => handlers.update(node.id, { fit: v }))
+    ]));
+    specific.push(el('div', { class: 'empty-hint', text: '图片会压缩到最长边 900px 后存进项目文件。' }));
+  }
 
   if (node.type === 'icon') {
     const select = el('select');

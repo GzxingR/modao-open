@@ -3,7 +3,7 @@
  * 所有修改都走 mutate()，保证快照一致。
  */
 
-import { createProject, createPage, createNode, getDevice, cloneNode, normalizeProject, uid } from './model.js';
+import { createProject, createPage, createNode, getDevice, resolveDevice, cloneNode, normalizeProject, uid } from './model.js';
 
 const STORAGE_KEY = 'modao-open:project:v1';
 
@@ -49,7 +49,7 @@ export class Store {
     return this.state.project.pages.find((p) => p.id === id) || this.state.project.pages[0];
   }
 
-  get device() { return getDevice(this.page.deviceId); }
+  get device() { return resolveDevice(this.page); }
 
   get selectedNodes() {
     const ids = new Set(this.state.selection);
@@ -381,8 +381,29 @@ export class Store {
   setDevice(deviceId) {
     this.mutate((project) => {
       for (const p of project.pages) {
-        if (p.id === project.activePageId) p.deviceId = getDevice(deviceId).id;
+        if (p.id === project.activePageId) {
+          p.deviceId = getDevice(deviceId).id;
+          p.customW = null;
+          p.customH = null;
+        }
       }
+    }, { reason: 'device' });
+  }
+
+  /** 页面级自定义画布尺寸 */
+  setCustomSize(w, h) {
+    const W = Math.max(120, Math.min(4000, Math.round(Number(w) || 0)));
+    const H = Math.max(200, Math.min(6000, Math.round(Number(h) || 0)));
+    this.mutate(() => {
+      this.page.customW = W;
+      this.page.customH = H;
+    }, { reason: 'device' });
+  }
+
+  clearCustomSize() {
+    this.mutate(() => {
+      this.page.customW = null;
+      this.page.customH = null;
     }, { reason: 'device' });
   }
 

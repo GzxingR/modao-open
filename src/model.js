@@ -19,6 +19,23 @@ export function getDevice(id) {
   return DEVICES[0];
 }
 
+/** 页面实际使用的设备尺寸（支持页面级自定义宽高） */
+export function resolveDevice(page) {
+  const base = getDevice(page && page.deviceId);
+  if (page && page.customW > 0 && page.customH > 0) {
+    return {
+      id: base.id,
+      label: base.label.replace(/\s*·.*$/, '') + ' · 自定义',
+      w: Math.round(page.customW),
+      h: Math.round(page.customH),
+      safeTop: base.safeTop,
+      safeBottom: base.safeBottom,
+      custom: true
+    };
+  }
+  return base;
+}
+
 let counter = 0;
 export function uid(prefix = 'n') {
   counter += 1;
@@ -82,7 +99,7 @@ export const COMPONENTS = [
     icon: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M6.5 16l3.2-3.6 2.4 2.4 2.6-3.2L18.5 16"/>',
     defaults: (dev) => ({
       w: dev.w, h: 220, bg: '#f5f5f5', radius: 0, text: '图片',
-      fontSize: 14, color: '#999999', align: 'center', borderWidth: 0
+      fontSize: 14, color: '#999999', align: 'center', borderWidth: 0, src: ''
     })
   },
   {
@@ -201,6 +218,7 @@ function baseNode(type, device) {
     verticalAlign: 'center',
     lineHeight: 1.4,
     paddingX: 0,
+    src: '',
     locked: false,
     hidden: false,
     // 组件状态（墨刀式动态组件的轻量实现：外观变体）
@@ -287,6 +305,8 @@ export function normalizeProject(raw) {
       name: p.name || ('页面 ' + (i + 1)),
       deviceId,
       bg: p.bg || '#ffffff',
+      customW: p.customW > 0 ? Math.round(p.customW) : null,
+      customH: p.customH > 0 ? Math.round(p.customH) : null,
       nodes
     };
   });
