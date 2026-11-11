@@ -2,7 +2,7 @@
  * 节点渲染：把数据模型渲染成真实 DOM（画布与预览共用）
  */
 
-import { ICONS, viewOf } from './model.js';
+import { ICONS, viewOf, currentGroupChildren } from './model.js';
 
 function px(v) { return typeof v === 'number' ? v + 'px' : v; }
 
@@ -293,7 +293,7 @@ export function createNodeEl(node, opts = {}) {
       el.style.background = 'transparent';
       el.style.border = 'none';
       el.style.overflow = 'visible';
-      for (const child of node.children || []) {
+      for (const child of currentGroupChildren(node)) {
         if (child.hidden) continue;
         el.appendChild(createNodeEl(child, opts));
       }

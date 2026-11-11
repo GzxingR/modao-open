@@ -358,6 +358,67 @@ export class Store {
     }, { reason: 'overlay' });
   }
 
+  /* ---------- 分组状态（真动态组件：每个状态一套子元素） ---------- */
+  addGroupState(groupId, name) {
+    const g = this.nodeById(groupId);
+    if (!g || g.type !== 'group') return null;
+    const st = {
+      id: uid('s'),
+      name: name || ('状态 ' + ((g.states ? g.states.length : 0) + 1)),
+      children: JSON.parse(JSON.stringify(g.children || []))
+    };
+    this.mutate(() => {
+      if (!g.states) g.states = [];
+      g.states.push(st);
+      g.activeStateId = st.id;
+    }, { reason: 'state' });
+    return st;
+  }
+
+  setGroupState(groupId, stateId) {
+    const g = this.nodeById(groupId);
+    if (!g || !g.states) return;
+    this.mutate(() => { g.activeStateId = stateId; }, { reason: 'state' });
+  }
+
+  removeGroupState(groupId, stateId) {
+    const g = this.nodeById(groupId);
+    if (!g || !g.states) return;
+    this.mutate(() => {
+      g.states = g.states.filter((s) => s.id !== stateId);
+      if (!g.states.length) { g.states = null; g.activeStateId = null; return; }
+      if (g.activeStateId === stateId) g.activeStateId = g.states[0].id;
+    }, { reason: 'state' });
+  }
+
+  /** 把组当前子元素快照进某个状态 */
+  captureGroupChildren(groupId, stateId) {
+    const g = this.nodeById(groupId);
+    if (!g || !g.states) return;
+    const snapshot = JSON.parse(JSON.stringify(g.children || []));
+    this.mutate(() => {
+      for (const s of g.states) if (s.id === stateId) s.children = snapshot;
+    }, { reason: 'state' });
+  }
+
+  /** 用当前选中的页面元素替换某状态的子元素（坐标转成组内相对坐标） */
+  replaceGroupStateFromSelection(groupId, stateId) {
+    const g = this.nodeById(groupId);
+    if (!g || !g.states) return 0;
+    const picked = this.selectedNodes.filter((n) => n.id !== groupId);
+    if (!picked.length) return 0;
+    const snapshot = picked.map((n) => {
+      const c = JSON.parse(JSON.stringify(n));
+      c.x = Math.round(c.x - g.x);
+      c.y = Math.round(c.y - g.y);
+      return c;
+    });
+    this.mutate(() => {
+      for (const s of g.states) if (s.id === stateId) s.children = snapshot;
+    }, { reason: 'state' });
+    return snapshot.length;
+  }
+
   /* ---------- 剪贴板 ---------- */
   copySelected() {
     const nodes = this.selectedNodes;

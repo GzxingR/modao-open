@@ -302,6 +302,16 @@ export function viewOf(node) {
   return merged;
 }
 
+/**
+ * 分组当前该渲染哪些子元素：
+ * 若该组的状态里带了 children（真动态组件），用当前状态的；否则用组自己的 children。
+ */
+export function currentGroupChildren(node) {
+  const st = currentState(node);
+  if (st && Array.isArray(st.children) && st.children.length) return st.children;
+  return node.children || [];
+}
+
 /** 组件状态可选的外观字段（限制范围，避免状态改到位置尺寸） */
 export const STATE_STYLE_KEYS = ['text', 'bg', 'color', 'radius', 'fontSize', 'fontWeight', 'borderColor', 'borderWidth', 'align', 'opacity', 'icon', 'checked', 'on', 'activeIndex'];
 
