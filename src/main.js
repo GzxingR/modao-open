@@ -14,6 +14,7 @@ import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
 import { downloadProjectPDF } from './pdf.js';
 import { openMenu, hideMenu } from './contextmenu.js';
 import { initResizers } from './resizer.js';
+import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
 import { buildAssignmentProject } from './presets.js';
 
 /* ---------------- DOM ---------------- */
@@ -157,6 +158,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   else if (act === 'toggle-grid') store.toggleGrid();
   else if (act === 'toggle-links') store.toggleLinks();
   else if (act === 'inspect') store.toggleInspect();
+  else if (act === 'theme') cycleTheme();
 });
 
 document.querySelector('.right-actions').addEventListener('click', async (e) => {
@@ -647,6 +649,8 @@ function seedFirstProject() {
 
 function boot() {
   fillDeviceSelect();
+  const urlTheme = (/[?&]theme=(dark|light|auto)/.exec(location.search) || [])[1];
+  applyTheme(urlTheme || getStoredTheme());
   const autoPreset = /[?&]preset=(1|demo)/.test(location.search);
   const autoEmpty = /[?&]empty=1/.test(location.search);
   if (autoPreset) {
