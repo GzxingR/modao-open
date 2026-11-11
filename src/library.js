@@ -86,7 +86,9 @@ export function renderPageList(container, store, handlers) {
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       if (store.project.pages.length <= 1) return handlers.toast('至少保留一个页面');
-      if (confirm('删除页面「' + page.name + '」？')) store.deletePage(page.id);
+      const pageName = page.name;
+      store.deletePage(page.id);
+      handlers.toast('已删除页面「' + pageName + '」', { label: '撤销', onClick: () => store.undo() });
     });
     row.appendChild(del);
 

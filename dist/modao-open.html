@@ -629,6 +629,60 @@ textarea.full {
 .ctx-hint { font-size: 10px; color: var(--text-dim); }
 .ctx-divider { height: 1px; background: var(--line); margin: 4px 2px; }
 
+.save-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  opacity: .75;
+  margin-right: 2px;
+  flex: 0 0 auto;
+  transition: background .2s, opacity .2s;
+}
+.save-dot.saving { background: #f59e0b; opacity: 1; }
+.save-dot.error { background: #ff4d4f; opacity: 1; }
+
+.toast-action {
+  margin-left: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.35);
+  color: #cfe2ff;
+  border-radius: 5px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.toast-action:hover { background: rgba(255,255,255,.12); }
+
+/* ---------- 帮助面板 ---------- */
+.help-wrap { font-size: 12px; line-height: 1.6; }
+.help-section-title {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.help-table { display: flex; flex-direction: column; gap: 3px; }
+.help-row { display: flex; gap: 12px; padding: 2px 0; }
+.help-key {
+  flex: 0 0 190px;
+  color: var(--accent-soft-text);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+.help-desc { flex: 1; color: var(--text-dim); }
+.help-tips { margin: 6px 0 0; padding-left: 18px; color: var(--text-dim); }
+.help-tips li { margin-bottom: 4px; }
+.help-foot {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 /* ---------- preview ---------- */
 .preview-mask {
   position: fixed;
@@ -735,9 +789,13 @@ textarea.full {
       <button class="icon-btn" data-act="theme" title="切换主题" id="themeBtn">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
       </button>
+      <button class="icon-btn" data-act="help" title="帮助与快捷键（按 ?）" id="helpBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.4a2.6 2.6 0 1 1 3.6 2.4c-.8.34-1.1.9-1.1 1.8"/><circle cx="12" cy="17.3" r="0.9" fill="currentColor" stroke="none"/></svg>
+      </button>
     </div>
 
     <div class="right-actions">
+      <span class="save-dot" id="saveDot" title="已保存"></span>
       <button class="tb" data-act="preset" title="载入课程作业四页示例">作业示例</button>
       <button class="tb ai" data-act="ai" title="AI 生成（自带 API Key）">AI 生成</button>
       <button class="tb" data-act="preview" title="预览演示">预览</button>
@@ -1269,6 +1327,8 @@ class Store {
       showLinks: true,
       inspectMode: false,
       spacePanning: false,
+      saveState: 'saved',
+      saveError: null,
       fitRequested: true
     };
     this.listeners = new Set();
@@ -1905,12 +1965,29 @@ class Store {
 
   /* ---------- 持久化 ---------- */
   persist() {
+    let payload;
     try {
-      const payload = JSON.stringify(this.project);
-      localStorage.setItem(STORAGE_KEY, payload);
+      payload = JSON.stringify(this.project);
     } catch (e) {
+      this.state.saveState = 'error';
+      this.state.saveError = '项目数据无法序列化';
+      this.emit('save');
+      return;
+    }
+
+    this.state.saveState = 'saving';
+    try {
+      localStorage.setItem(STORAGE_KEY, payload);
+      this.state.saveState = 'saved';
+      this.state.saveError = null;
+      this.lastSavedAt = Date.now();
+    } catch (e) {
+      this.state.saveState = 'error';
+      const quota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+      this.state.saveError = quota ? '浏览器存储空间已满' : String((e && e.message) || e);
       console.warn('[store] 保存失败', e);
     }
+    this.emit('save');
   }
 
   loadFromStorage() {
@@ -2154,6 +2231,139 @@ function cycleTheme(root) {
   const cur = normalizeMode(el.getAttribute('data-theme') || getStoredTheme());
   const next = THEME_MODES[(THEME_MODES.indexOf(cur) + 1) % THEME_MODES.length];
   return applyTheme(next, el);
+}
+
+/* ===== src/help.js ===== */
+/**
+ * 内置帮助：快捷键速查 + 功能地图。按 ? 或点顶栏问号打开。
+ */
+
+const HELP_SECTIONS = [
+  {
+    title: '画布操作',
+    items: [
+      ['空格 + 拖拽', '平移画布'],
+      ['Ctrl + 滚轮', '以鼠标位置缩放'],
+      ['滚轮', '滚动页面（不缩放）'],
+      ['点空白拖拽', '框选多个元素'],
+      ['Shift + 点元素', '加选 / 取消选中'],
+      ['方向键 / Shift+方向键', '微调 1px / 10px'],
+      ['右键', '元素或画布菜单']
+    ]
+  },
+  {
+    title: '编辑',
+    items: [
+      ['Ctrl + Z / Ctrl + Shift + Z', '撤销 / 重做'],
+      ['Ctrl + C / Ctrl + V', '复制 / 粘贴'],
+      ['Ctrl + D', '复制一份'],
+      ['Ctrl + A', '全选本页元素'],
+      ['Ctrl + G / Ctrl + Shift + G', '组合 / 解散'],
+      ['Delete / Backspace', '删除选中'],
+      ['拖动选中框的 8 个手柄', '改尺寸']
+    ]
+  },
+  {
+    title: '交互与预览',
+    items: [
+      ['选中元素 → 右侧「交互」', '设置触发方式 + 行为 + 条件'],
+      ['拖动元素右上角闪电形状的连线点', '（本版用面板配置，无需拖线）'],
+      ['顶栏「预览」', '按真实设备尺寸演示，交互可点'],
+      ['顶栏「标注」', '点元素看规格、导切图'],
+      ['?', '打开这个帮助']
+    ]
+  },
+  {
+    title: '导出',
+    items: [
+      ['导出 → 当前页 PNG', '2 倍图，贴作业'],
+      ['导出 → 全部页面 PNG', '逐页下载'],
+      ['导出 → 离线演示 HTML', '单文件，双击即演示，可发人'],
+      ['导出 → 全部页面 PDF', '每页一张'],
+      ['导出 → 项目 JSON', '源文件，可再导入'],
+      ['规格', '生成文字规格清单，可直接贴答案']
+    ]
+  },
+  {
+    title: '变量与条件',
+    items: [
+      ['右侧「变量（项目级）」', '添加变量并设初始值'],
+      ['行为 = 设置变量值', '触发时给变量赋值'],
+      ['交互的「条件」', '等于 / 不等于 / 为真 / 为假，不满足就不执行'],
+      ['触发 = 监听变量变化', '变量一变就按条件执行']
+    ]
+  },
+  {
+    title: '浮层与动态组件',
+    items: [
+      ['分组 → 右侧「浮层」', '设为浮层，可带遮罩、默认打开'],
+      ['行为 = 打开 / 关闭浮层', '控制浮层显隐'],
+      ['分组 → 「组件状态」', '每个状态一整套子元素，可做登录/未登录切换'],
+      ['普通组件 → 「组件状态」', '多套外观（常态/按下/选中）']
+    ]
+  }
+];
+
+const HELP_TIPS = [
+  '所有改动自动存在浏览器里，刷新不丢；换电脑请用「导出 → 项目 JSON」带走。',
+  'AI 生成用的是你自己的 API Key，只存在本机 localStorage。',
+  '单文件版双击即用；通过本地服务打开时 AI 才能用（file:// 下会被 CORS 拦）。'
+];
+
+/** 渲染帮助内容（返回 DOM 片段） */
+function renderHelpContent(version) {
+  const wrap = document.createElement('div');
+  wrap.className = 'help-wrap';
+
+  const lead = document.createElement('div');
+  lead.className = 'hint';
+  lead.textContent = '这是一个本地优先的开源原型工作台，没有账号、不上传稿件。下面是常用操作。';
+  wrap.appendChild(lead);
+
+  for (const sec of HELP_SECTIONS) {
+    const h = document.createElement('div');
+    h.className = 'help-section-title';
+    h.textContent = sec.title;
+    wrap.appendChild(h);
+
+    const table = document.createElement('div');
+    table.className = 'help-table';
+    for (const [key, desc] of sec.items) {
+      const row = document.createElement('div');
+      row.className = 'help-row';
+      const k = document.createElement('div');
+      k.className = 'help-key';
+      k.textContent = key;
+      const d = document.createElement('div');
+      d.className = 'help-desc';
+      d.textContent = desc;
+      row.appendChild(k);
+      row.appendChild(d);
+      table.appendChild(row);
+    }
+    wrap.appendChild(table);
+  }
+
+  const tipTitle = document.createElement('div');
+  tipTitle.className = 'help-section-title';
+  tipTitle.textContent = '几个提醒';
+  wrap.appendChild(tipTitle);
+
+  const ul = document.createElement('ul');
+  ul.className = 'help-tips';
+  for (const t of HELP_TIPS) {
+    const li = document.createElement('li');
+    li.textContent = t;
+    ul.appendChild(li);
+  }
+  wrap.appendChild(ul);
+
+  const foot = document.createElement('div');
+  foot.className = 'help-foot';
+  foot.textContent = 'modao-open ' + (version || '') + ' · MIT · github.com/GzxingR/modao-open';
+  wrap.appendChild(foot);
+
+  return wrap;
 }
 
 /* ===== src/nodes.js ===== */
@@ -3026,7 +3236,9 @@ function renderPageList(container, store, handlers) {
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       if (store.project.pages.length <= 1) return handlers.toast('至少保留一个页面');
-      if (confirm('删除页面「' + page.name + '」？')) store.deletePage(page.id);
+      const pageName = page.name;
+      store.deletePage(page.id);
+      handlers.toast('已删除页面「' + pageName + '」', { label: '撤销', onClick: () => store.undo() });
     });
     row.appendChild(del);
 
@@ -5535,6 +5747,9 @@ function buildAssignmentProject() {
 
 
 
+const APP_VERSION = '2.4.0';
+
+
 /* ---------------- DOM ---------------- */
 const $ = (id) => document.getElementById(id);
 const canvasHost = $('canvasHost');
@@ -5555,11 +5770,45 @@ const zoomLabel = $('zoomLabel');
 
 /* ---------------- 小工具 ---------------- */
 let toastTimer = null;
-function toast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
+function toast(msg, action) {
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2000);
+  toastEl.textContent = '';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  toastEl.appendChild(text);
+  if (action && action.label) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.addEventListener('click', () => {
+      toastEl.classList.remove('show');
+      try { action.onClick(); } catch (e) { console.error('[toast action]', e); }
+    });
+    toastEl.appendChild(b);
+  }
+  toastEl.classList.add('show');
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), action ? 5200 : 2000);
+}
+
+/* ---------------- 保存状态指示 ---------------- */
+let lastSaveError = null;
+function updateSaveIndicator(state) {
+  const dot = document.getElementById('saveDot');
+  if (!dot) return;
+  dot.classList.toggle('saving', state.saveState === 'saving');
+  dot.classList.toggle('error', state.saveState === 'error');
+  if (state.saveState === 'error') {
+    dot.title = '保存失败：' + (state.saveError || '未知原因');
+  } else if (state.saveState === 'saving') {
+    dot.title = '保存中…';
+  } else {
+    dot.title = '已自动保存到本机';
+  }
+  if (state.saveState === 'error' && state.saveError !== lastSaveError) {
+    lastSaveError = state.saveError;
+    toast('保存失败：' + state.saveError + '，建议先「导出 → 项目 JSON」备份');
+  }
+  if (state.saveState === 'saved') lastSaveError = null;
 }
 
 let modalCleanup = null;
@@ -5640,6 +5889,8 @@ function renderAll(reason) {
 
   const guide = document.getElementById('emptyGuide');
   if (guide) guide.hidden = store.page.nodes.length > 0;
+
+  updateSaveIndicator(store.state);
   void reason;
 }
 
@@ -5647,6 +5898,10 @@ store.subscribe((state, reason) => {
   if (reason === 'zoom') {
     zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
     canvas.applyZoom();
+    return;
+  }
+  if (reason === 'save') {
+    updateSaveIndicator(state);
     return;
   }
   renderAll(reason);
@@ -5677,6 +5932,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   else if (act === 'toggle-links') store.toggleLinks();
   else if (act === 'inspect') store.toggleInspect();
   else if (act === 'theme') cycleTheme();
+  else if (act === 'help') openHelp();
 });
 
 document.querySelector('.right-actions').addEventListener('click', async (e) => {
@@ -5775,6 +6031,11 @@ window.addEventListener('keydown', (e) => {
     store.select(store.page.nodes.map((n) => n.id));
     return;
   }
+  if (e.key === '?') {
+    e.preventDefault();
+    openHelp();
+    return;
+  }
 
   if (meta && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -5816,7 +6077,12 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); exportProjectJSON(store.project); toast('项目 JSON 已保存'); return;
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (store.state.selection.length) { e.preventDefault(); store.deleteSelected(); }
+    if (store.state.selection.length) {
+      e.preventDefault();
+      const n = store.state.selection.length;
+      store.deleteSelected();
+      toast('已删除 ' + n + ' 个元素', { label: '撤销', onClick: () => store.undo() });
+    }
     return;
   }
   if (e.key === 'Escape') { store.clearSelection(); renderAll('selection'); return; }
@@ -5903,7 +6169,16 @@ function openCanvasMenu(x, y, nodeId) {
   if (node) {
     items.push({ label: '复制一份', hint: 'Ctrl+D', action: () => store.duplicateSelected() });
     items.push({ label: '复制', hint: 'Ctrl+C', action: () => { const n = store.copySelected(); if (n) toast('已复制 ' + n + ' 个元素'); } });
-    items.push({ label: '删除', hint: 'Del', danger: true, action: () => store.deleteSelected() });
+    items.push({
+      label: '删除',
+      hint: 'Del',
+      danger: true,
+      action: () => {
+        const n = store.state.selection.length;
+        store.deleteSelected();
+        toast('已删除 ' + n + ' 个元素', { label: '撤销', onClick: () => store.undo() });
+      }
+    });
     items.push({ divider: true });
     items.push({ label: '上移一层', action: () => store.bringForward(node.id) });
     items.push({ label: '下移一层', action: () => store.sendBackward(node.id) });
@@ -5940,15 +6215,25 @@ function openCanvasMenu(x, y, nodeId) {
       label: '清空本页',
       danger: true,
       action: () => {
-        if (!store.page.nodes.length) return;
-        if (!confirm('清空本页所有元素？')) return;
+        const total = store.page.nodes.length;
+        if (!total) return;
         store.select(store.page.nodes.map((n) => n.id));
         store.deleteSelected();
+        toast('已清空 ' + total + ' 个元素', { label: '撤销', onClick: () => store.undo() });
       }
     });
   }
 
   openMenu(x, y, items);
+}
+
+/* ---------------- 帮助 ---------------- */
+function openHelp() {
+  openModal('帮助与快捷键', () => renderHelpContent('v' + APP_VERSION), () => {
+    const box = document.createElement('div');
+    box.appendChild(btn('知道了', () => closeModal()));
+    return box;
+  });
 }
 
 /* ---------------- 标注模式 ---------------- */
@@ -6185,6 +6470,10 @@ function boot() {
   }
   renderAll('boot');
   initResizers();
+
+  if (/[?&]help=1/.test(location.search)) {
+    setTimeout(openHelp, 60);
+  }
 
   requestAnimationFrame(() => {
     canvas.fit();

@@ -15,6 +15,9 @@ import { downloadProjectPDF } from './pdf.js';
 import { openMenu, hideMenu } from './contextmenu.js';
 import { initResizers } from './resizer.js';
 import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
+import { renderHelpContent } from './help.js';
+
+const APP_VERSION = '2.4.0';
 import { buildAssignmentProject } from './presets.js';
 
 /* ---------------- DOM ---------------- */
@@ -37,11 +40,45 @@ const zoomLabel = $('zoomLabel');
 
 /* ---------------- 小工具 ---------------- */
 let toastTimer = null;
-function toast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
+function toast(msg, action) {
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2000);
+  toastEl.textContent = '';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  toastEl.appendChild(text);
+  if (action && action.label) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.addEventListener('click', () => {
+      toastEl.classList.remove('show');
+      try { action.onClick(); } catch (e) { console.error('[toast action]', e); }
+    });
+    toastEl.appendChild(b);
+  }
+  toastEl.classList.add('show');
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), action ? 5200 : 2000);
+}
+
+/* ---------------- 保存状态指示 ---------------- */
+let lastSaveError = null;
+function updateSaveIndicator(state) {
+  const dot = document.getElementById('saveDot');
+  if (!dot) return;
+  dot.classList.toggle('saving', state.saveState === 'saving');
+  dot.classList.toggle('error', state.saveState === 'error');
+  if (state.saveState === 'error') {
+    dot.title = '保存失败：' + (state.saveError || '未知原因');
+  } else if (state.saveState === 'saving') {
+    dot.title = '保存中…';
+  } else {
+    dot.title = '已自动保存到本机';
+  }
+  if (state.saveState === 'error' && state.saveError !== lastSaveError) {
+    lastSaveError = state.saveError;
+    toast('保存失败：' + state.saveError + '，建议先「导出 → 项目 JSON」备份');
+  }
+  if (state.saveState === 'saved') lastSaveError = null;
 }
 
 let modalCleanup = null;
@@ -122,6 +159,8 @@ function renderAll(reason) {
 
   const guide = document.getElementById('emptyGuide');
   if (guide) guide.hidden = store.page.nodes.length > 0;
+
+  updateSaveIndicator(store.state);
   void reason;
 }
 
@@ -129,6 +168,10 @@ store.subscribe((state, reason) => {
   if (reason === 'zoom') {
     zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
     canvas.applyZoom();
+    return;
+  }
+  if (reason === 'save') {
+    updateSaveIndicator(state);
     return;
   }
   renderAll(reason);
@@ -159,6 +202,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   else if (act === 'toggle-links') store.toggleLinks();
   else if (act === 'inspect') store.toggleInspect();
   else if (act === 'theme') cycleTheme();
+  else if (act === 'help') openHelp();
 });
 
 document.querySelector('.right-actions').addEventListener('click', async (e) => {
@@ -257,6 +301,11 @@ window.addEventListener('keydown', (e) => {
     store.select(store.page.nodes.map((n) => n.id));
     return;
   }
+  if (e.key === '?') {
+    e.preventDefault();
+    openHelp();
+    return;
+  }
 
   if (meta && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -298,7 +347,12 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); exportProjectJSON(store.project); toast('项目 JSON 已保存'); return;
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (store.state.selection.length) { e.preventDefault(); store.deleteSelected(); }
+    if (store.state.selection.length) {
+      e.preventDefault();
+      const n = store.state.selection.length;
+      store.deleteSelected();
+      toast('已删除 ' + n + ' 个元素', { label: '撤销', onClick: () => store.undo() });
+    }
     return;
   }
   if (e.key === 'Escape') { store.clearSelection(); renderAll('selection'); return; }
@@ -385,7 +439,16 @@ function openCanvasMenu(x, y, nodeId) {
   if (node) {
     items.push({ label: '复制一份', hint: 'Ctrl+D', action: () => store.duplicateSelected() });
     items.push({ label: '复制', hint: 'Ctrl+C', action: () => { const n = store.copySelected(); if (n) toast('已复制 ' + n + ' 个元素'); } });
-    items.push({ label: '删除', hint: 'Del', danger: true, action: () => store.deleteSelected() });
+    items.push({
+      label: '删除',
+      hint: 'Del',
+      danger: true,
+      action: () => {
+        const n = store.state.selection.length;
+        store.deleteSelected();
+        toast('已删除 ' + n + ' 个元素', { label: '撤销', onClick: () => store.undo() });
+      }
+    });
     items.push({ divider: true });
     items.push({ label: '上移一层', action: () => store.bringForward(node.id) });
     items.push({ label: '下移一层', action: () => store.sendBackward(node.id) });
@@ -422,15 +485,25 @@ function openCanvasMenu(x, y, nodeId) {
       label: '清空本页',
       danger: true,
       action: () => {
-        if (!store.page.nodes.length) return;
-        if (!confirm('清空本页所有元素？')) return;
+        const total = store.page.nodes.length;
+        if (!total) return;
         store.select(store.page.nodes.map((n) => n.id));
         store.deleteSelected();
+        toast('已清空 ' + total + ' 个元素', { label: '撤销', onClick: () => store.undo() });
       }
     });
   }
 
   openMenu(x, y, items);
+}
+
+/* ---------------- 帮助 ---------------- */
+function openHelp() {
+  openModal('帮助与快捷键', () => renderHelpContent('v' + APP_VERSION), () => {
+    const box = document.createElement('div');
+    box.appendChild(btn('知道了', () => closeModal()));
+    return box;
+  });
 }
 
 /* ---------------- 标注模式 ---------------- */
@@ -667,6 +740,10 @@ function boot() {
   }
   renderAll('boot');
   initResizers();
+
+  if (/[?&]help=1/.test(location.search)) {
+    setTimeout(openHelp, 60);
+  }
 
   requestAnimationFrame(() => {
     canvas.fit();

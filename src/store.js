@@ -21,6 +21,8 @@ export class Store {
       showLinks: true,
       inspectMode: false,
       spacePanning: false,
+      saveState: 'saved',
+      saveError: null,
       fitRequested: true
     };
     this.listeners = new Set();
@@ -657,12 +659,29 @@ export class Store {
 
   /* ---------- 持久化 ---------- */
   persist() {
+    let payload;
     try {
-      const payload = JSON.stringify(this.project);
-      localStorage.setItem(STORAGE_KEY, payload);
+      payload = JSON.stringify(this.project);
     } catch (e) {
+      this.state.saveState = 'error';
+      this.state.saveError = '项目数据无法序列化';
+      this.emit('save');
+      return;
+    }
+
+    this.state.saveState = 'saving';
+    try {
+      localStorage.setItem(STORAGE_KEY, payload);
+      this.state.saveState = 'saved';
+      this.state.saveError = null;
+      this.lastSavedAt = Date.now();
+    } catch (e) {
+      this.state.saveState = 'error';
+      const quota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+      this.state.saveError = quota ? '浏览器存储空间已满' : String((e && e.message) || e);
       console.warn('[store] 保存失败', e);
     }
+    this.emit('save');
   }
 
   loadFromStorage() {

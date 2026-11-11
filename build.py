@@ -22,6 +22,7 @@ ORDER = [
     "contextmenu.js",
     "resizer.js",
     "theme.js",
+    "help.js",
     "nodes.js",
     "canvas.js",
     "library.js",

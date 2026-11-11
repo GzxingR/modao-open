@@ -622,6 +622,60 @@ textarea.full {
 .ctx-hint { font-size: 10px; color: var(--text-dim); }
 .ctx-divider { height: 1px; background: var(--line); margin: 4px 2px; }
 
+.save-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  opacity: .75;
+  margin-right: 2px;
+  flex: 0 0 auto;
+  transition: background .2s, opacity .2s;
+}
+.save-dot.saving { background: #f59e0b; opacity: 1; }
+.save-dot.error { background: #ff4d4f; opacity: 1; }
+
+.toast-action {
+  margin-left: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.35);
+  color: #cfe2ff;
+  border-radius: 5px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.toast-action:hover { background: rgba(255,255,255,.12); }
+
+/* ---------- 帮助面板 ---------- */
+.help-wrap { font-size: 12px; line-height: 1.6; }
+.help-section-title {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.help-table { display: flex; flex-direction: column; gap: 3px; }
+.help-row { display: flex; gap: 12px; padding: 2px 0; }
+.help-key {
+  flex: 0 0 190px;
+  color: var(--accent-soft-text);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+.help-desc { flex: 1; color: var(--text-dim); }
+.help-tips { margin: 6px 0 0; padding-left: 18px; color: var(--text-dim); }
+.help-tips li { margin-bottom: 4px; }
+.help-foot {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 /* ---------- preview ---------- */
 .preview-mask {
   position: fixed;
