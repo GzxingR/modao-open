@@ -2,7 +2,7 @@
  * 右侧属性面板
  */
 
-import { ICON_NAMES, ICONS, DEVICES } from './model.js';
+import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS } from './model.js';
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -286,6 +286,7 @@ export function renderInspector(container, store, handlers) {
   const actions = [
     { value: 'none', label: '无交互' },
     { value: 'navigate', label: '点击跳转页面' },
+    { value: 'state', label: '点击切换组件状态' },
     { value: 'show', label: '点击显示目标' },
     { value: 'hide', label: '点击隐藏目标' },
     { value: 'toggle', label: '点击切换目标' }
@@ -311,6 +312,44 @@ export function renderInspector(container, store, handlers) {
       }
       pageSelect.addEventListener('change', () => handlers.update(node.id, { link: { action: 'navigate', targetPageId: pageSelect.value } }));
       linkRows.push(el('div', { class: 'row' }, [pageSelect]));
+    }
+  } else if (currentAction === 'state') {
+    const targets = store.page.nodes.filter((n) => n.id !== node.id && n.states && n.states.length);
+    if (!targets.length) {
+      linkRows.push(el('div', { class: 'empty-hint', text: '本页还没有带状态的组件。先选中一个组件，在下面「组件状态」里添加状态。' }));
+    } else {
+      const nodeSelect = el('select');
+      for (const n of targets) {
+        const o = el('option', { value: n.id, text: (n.name || n.type) + ' · ' + n.states.length + ' 个状态' });
+        if (node.link && node.link.targetNodeId === n.id) o.selected = true;
+        nodeSelect.appendChild(o);
+      }
+      linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
+
+      const currentTargetId = (node.link && node.link.targetNodeId) || targets[0].id;
+      const targetNode = targets.find((n) => n.id === currentTargetId) || targets[0];
+
+      const stateSelect = el('select');
+      const loopOpt = el('option', { value: '', text: '循环切到下一个状态' });
+      stateSelect.appendChild(loopOpt);
+      for (const st of targetNode.states) {
+        const o = el('option', { value: st.id, text: st.name });
+        if (node.link && node.link.targetStateId === st.id) o.selected = true;
+        stateSelect.appendChild(o);
+      }
+      linkRows.push(el('div', { class: 'row' }, [stateSelect]));
+
+      const apply = (patch) => handlers.update(node.id, { link: patch });
+      nodeSelect.addEventListener('change', () => {
+        apply({ action: 'state', targetNodeId: nodeSelect.value, targetStateId: null });
+      });
+      stateSelect.addEventListener('change', () => {
+        apply({
+          action: 'state',
+          targetNodeId: currentTargetId,
+          targetStateId: stateSelect.value || null
+        });
+      });
     }
   } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle') {
     const nodeSelect = el('select');
@@ -339,6 +378,62 @@ export function renderInspector(container, store, handlers) {
   });
 
   container.appendChild(group('交互（预览时生效）', linkRows));
+
+  /* ---------- 组件状态（动态组件 · 外观变体） ---------- */
+  const stateRows = [];
+  const curState = currentState(node);
+  if (node.states && node.states.length) {
+    stateRows.push(el('div', {
+      class: 'empty-hint',
+      style: { padding: '0 2px 6px' },
+      text: '当前状态：' + (curState ? curState.name : '—') + '　点“存”把现在的外观存进该状态。'
+    }));
+    for (const st of node.states) {
+      const row = el('div', { class: 'row' });
+      const nameWrap = el('div', { class: 'field', style: { flex: '1' } });
+      const input = el('input', { type: 'text', value: st.name });
+      input.addEventListener('change', () => {
+        store.renameState(node.id, st.id, input.value.trim() || st.name);
+      });
+      nameWrap.appendChild(input);
+      row.appendChild(nameWrap);
+
+      const isCur = curState && curState.id === st.id;
+      const curBtn = el('button', { class: 'mini', text: isCur ? '●' : '○', title: '设为当前状态' });
+      curBtn.addEventListener('click', () => store.setActiveState(node.id, st.id));
+      row.appendChild(curBtn);
+
+      const saveBtn = el('button', { class: 'mini', text: '存', title: '把当前外观存进这个状态' });
+      saveBtn.addEventListener('click', () => {
+        store.captureStateStyle(node.id, st.id, STATE_STYLE_KEYS);
+        handlers.toast('外观已存进「' + st.name + '」');
+      });
+      row.appendChild(saveBtn);
+
+      const delBtn = el('button', { class: 'mini', text: '✕', title: '删除状态' });
+      delBtn.addEventListener('click', () => store.removeState(node.id, st.id));
+      row.appendChild(delBtn);
+
+      stateRows.push(row);
+    }
+  } else {
+    stateRows.push(el('div', {
+      class: 'empty-hint',
+      text: '添加状态后，这个组件可以有多套外观，交互里就能选「点击切换组件状态」。'
+    }));
+  }
+
+  const addStateBtn = el('button', { class: 'tb', text: '＋ 添加组件状态' });
+  addStateBtn.style.width = '100%';
+  addStateBtn.addEventListener('click', () => {
+    const st = store.addState(node.id);
+    if (st) {
+      store.captureStateStyle(node.id, st.id, STATE_STYLE_KEYS);
+      handlers.toast('已添加状态：' + st.name);
+    }
+  });
+  stateRows.push(el('div', { class: 'row' }, [addStateBtn]));
+  container.appendChild(group('组件状态（动态组件）', stateRows));
 
   /* ---------- 排列 ---------- */
   container.appendChild(group('排列', [

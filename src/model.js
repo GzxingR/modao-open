@@ -203,10 +203,40 @@ function baseNode(type, device) {
     paddingX: 0,
     locked: false,
     hidden: false,
+    // 组件状态（墨刀式动态组件的轻量实现：外观变体）
+    states: null,        // [{ id, name, style: { bg, text, color, ... } }]
+    activeStateId: null,
     // 交互（墨刀式）：点击后做什么
     link: null
   };
 }
+
+/** 取节点当前生效的状态对象（没有状态则返回 null） */
+export function currentState(node) {
+  if (!node || !node.states || !node.states.length) return null;
+  for (const s of node.states) if (s.id === node.activeStateId) return s;
+  return node.states[0];
+}
+
+/** 取"叠加了当前状态外观"的节点视图；不修改原对象 */
+export function viewOf(node) {
+  const st = currentState(node);
+  if (!st || !st.style) return node;
+  const merged = Object.assign({}, node, st.style);
+  merged.id = node.id;
+  merged.type = node.type;
+  merged.x = node.x;
+  merged.y = node.y;
+  merged.w = node.w;
+  merged.h = node.h;
+  merged.states = node.states;
+  merged.activeStateId = node.activeStateId;
+  merged.link = node.link;
+  return merged;
+}
+
+/** 组件状态可选的外观字段（限制范围，避免状态改到位置尺寸） */
+export const STATE_STYLE_KEYS = ['text', 'bg', 'color', 'radius', 'fontSize', 'fontWeight', 'borderColor', 'borderWidth', 'align', 'opacity', 'icon', 'checked', 'on', 'activeIndex'];
 
 export function createNode(type, device, patch = {}) {
   const def = getComponent(type);

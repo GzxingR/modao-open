@@ -25,6 +25,7 @@ ORDER = [
     "inspector.js",
     "links.js",
     "io.js",
+    "exportHtml.js",
     "ai.js",
     "presets.js",
     "main.js",

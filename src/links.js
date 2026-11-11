@@ -33,6 +33,16 @@ export function renderLinks(layer, store) {
       if (!target) continue;
       to = { x: device.w - 10, y: from.y };
       label = '→ ' + target.name;
+    } else if (node.link.action === 'state') {
+      const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
+      if (!target) continue;
+      to = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
+      let stName = '下一个状态';
+      if (node.link.targetStateId && target.states) {
+        const st = target.states.find((s) => s.id === node.link.targetStateId);
+        if (st) stName = st.name;
+      }
+      label = '切状态 → ' + stName;
     } else {
       const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
       if (!target) continue;
@@ -59,6 +69,9 @@ export function renderLinks(layer, store) {
     text.setAttribute('x', String(node.link.action === 'navigate' ? Math.max(8, to.x - 96) : to.x + 6));
     text.setAttribute('y', String(to.y - 6));
     text.setAttribute('fill', '#1677ff');
+    text.setAttribute('stroke', 'rgba(255,255,255,0.92)');
+    text.setAttribute('stroke-width', '3');
+    text.setAttribute('paint-order', 'stroke');
     text.setAttribute('font-size', '10');
     text.setAttribute('font-family', 'Microsoft YaHei, sans-serif');
     text.textContent = label;
@@ -72,7 +85,8 @@ export function renderLinks(layer, store) {
 }
 
 /**
- * 预览运行时：可点击跳转 / 显隐 / 切换。
+ * 预览运行时：页面跳转、显隐切换、组件状态切换。
+ * project 传进来的应是深拷贝，运行时允许改动其 activeStateId。
  */
 export function createPreviewRuntime(project, startPageId, mount) {
   let currentPageId = startPageId;
@@ -85,27 +99,85 @@ export function createPreviewRuntime(project, startPageId, mount) {
   function render() {
     const page = pageById(currentPageId);
     mount.textContent = '';
+
+    const dev = page.device || { w: 402, h: 874 };
     const host = document.createElement('div');
     host.style.position = 'relative';
-    host.style.width = page.w ? page.w + 'px' : '100%';
-    host.style.height = page.h ? page.h + 'px' : '100%';
+    host.style.width = dev.w + 'px';
+    host.style.height = dev.h + 'px';
     host.style.background = page.bg || '#ffffff';
     host.style.overflow = 'hidden';
 
-    const device = page.device || null;
-    host.style.width = (device ? device.w : 402) + 'px';
-    host.style.height = (device ? device.h : 874) + 'px';
-
     const nodeEls = new Map();
+
+    function bind(node, el) {
+      el.style.cursor = node.link ? 'pointer' : 'default';
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        runLink(node);
+      });
+    }
+
+    function rerenderNode(node) {
+      const old = nodeEls.get(node.id);
+      if (!old) return;
+      const fresh = createNodeEl(node, { interactive: true });
+      if (hiddenState.get(node.id) === true) fresh.style.display = 'none';
+      bind(node, fresh);
+      old.replaceWith(fresh);
+      nodeEls.set(node.id, fresh);
+    }
+
+    function runLink(node) {
+      const link = node.link;
+      if (!link || !link.action || link.action === 'none') return;
+
+      if (link.action === 'navigate') {
+        if (link.targetPageId && link.targetPageId !== page.id) {
+          currentPageId = link.targetPageId;
+          hiddenState.clear();
+          render();
+        }
+        return;
+      }
+
+      const target = page.nodes.find((n) => n.id === link.targetNodeId);
+      if (!target) return;
+
+      if (link.action === 'state') {
+        if (!target.states || !target.states.length) return;
+        if (link.targetStateId) {
+          target.activeStateId = link.targetStateId;
+        } else {
+          const idx = target.states.findIndex((s) => s.id === target.activeStateId);
+          const next = target.states[(idx + 1) % target.states.length];
+          target.activeStateId = next.id;
+        }
+        rerenderNode(target);
+        return;
+      }
+
+      const el = nodeEls.get(target.id);
+      if (!el) return;
+
+      if (link.action === 'show') {
+        el.style.display = '';
+        hiddenState.set(target.id, false);
+      } else if (link.action === 'hide') {
+        el.style.display = 'none';
+        hiddenState.set(target.id, true);
+      } else if (link.action === 'toggle') {
+        const isHidden = el.style.display === 'none';
+        el.style.display = isHidden ? '' : 'none';
+        hiddenState.set(target.id, !isHidden);
+      }
+    }
+
     for (const node of page.nodes) {
       if (node.hidden) continue;
       const el = createNodeEl(node, { interactive: true });
-      el.style.cursor = node.link ? 'pointer' : 'default';
       if (hiddenState.get(node.id) === true) el.style.display = 'none';
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        runLink(node, page, nodeEls);
-      });
+      bind(node, el);
       host.appendChild(el);
       nodeEls.set(node.id, el);
     }
@@ -113,39 +185,13 @@ export function createPreviewRuntime(project, startPageId, mount) {
     mount.appendChild(host);
   }
 
-  function runLink(node, page, nodeEls) {
-    const link = node.link;
-    if (!link || !link.action || link.action === 'none') return;
-
-    if (link.action === 'navigate') {
-      if (link.targetPageId && link.targetPageId !== page.id) {
-        currentPageId = link.targetPageId;
-        hiddenState.clear();
-        render();
-      }
-      return;
-    }
-
-    const targetEl = nodeEls.get(link.targetNodeId);
-    if (!targetEl) return;
-    const id = link.targetNodeId;
-
-    if (link.action === 'show') {
-      targetEl.style.display = '';
-      hiddenState.set(id, false);
-    } else if (link.action === 'hide') {
-      targetEl.style.display = 'none';
-      hiddenState.set(id, true);
-    } else if (link.action === 'toggle') {
-      const isHidden = targetEl.style.display === 'none';
-      targetEl.style.display = isHidden ? '' : 'none';
-      hiddenState.set(id, !isHidden);
-    }
-  }
-
   return {
     start() { render(); },
-    restart() { currentPageId = startPageId; hiddenState.clear(); render(); },
+    restart() {
+      currentPageId = startPageId;
+      hiddenState.clear();
+      render();
+    },
     currentPage() { return pageById(currentPageId); }
   };
 }

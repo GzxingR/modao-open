@@ -61,6 +61,26 @@ export async function renderPageToDataURL(page) {
   return { dataUrl, width: device.w * 2, height: device.h * 2 };
 }
 
+/** 批量导出所有页面 PNG（间隔触发，避免浏览器拦截多文件下载） */
+export async function exportAllPagesPNG(project, onProgress) {
+  const pages = project.pages;
+  let ok = 0;
+  for (let i = 0; i < pages.length; i += 1) {
+    const page = pages[i];
+    if (onProgress) onProgress(i + 1, pages.length, page.name);
+    const { dataUrl } = await renderPageToDataURL(page);
+    const base64 = dataUrl.split(',')[1];
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let k = 0; k < bin.length; k += 1) bytes[k] = bin.charCodeAt(k);
+    const name = safeName(project.name + '-' + (i + 1) + '-' + page.name) + '.png';
+    downloadBlob(new Blob([bytes], { type: 'image/png' }), name);
+    ok += 1;
+    await new Promise((r) => setTimeout(r, 420));
+  }
+  return ok;
+}
+
 /** 把页面导出成 PNG 文件 */
 export async function exportPagePNG(page, projectName) {
   const { dataUrl } = await renderPageToDataURL(page);

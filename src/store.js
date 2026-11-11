@@ -3,7 +3,7 @@
  * 所有修改都走 mutate()，保证快照一致。
  */
 
-import { createProject, createPage, createNode, getDevice, cloneNode, normalizeProject } from './model.js';
+import { createProject, createPage, createNode, getDevice, cloneNode, normalizeProject, uid } from './model.js';
 
 const STORAGE_KEY = 'modao-open:project:v1';
 
@@ -24,6 +24,7 @@ export class Store {
     this.listeners = new Set();
     this.undoStack = [];
     this.redoStack = [];
+    this.clipboard = [];
     this.pending = false;
     this.maxHistory = 80;
   }
@@ -126,7 +127,8 @@ export class Store {
   addNode(type, patch = {}) {
     const device = this.device;
     const node = createNode(type, device, patch);
-    node.y = this.nextFreeY(node.h);
+    // 只有调用方没指定 y 时才自动找空位（拖放到画布时必须尊重落点）
+    if (patch.y === undefined) node.y = this.nextFreeY(node.h);
     this.mutate((project) => {
       const page = this.page;
       page.nodes.push(node);
@@ -183,6 +185,82 @@ export class Store {
     });
     this.mutate(() => { this.page.nodes.push(...copies); }, { reason: 'duplicate' });
     this.select(copies.map((c) => c.id));
+  }
+
+  /* ---------- 组件状态（动态组件 · 外观变体） ---------- */
+  addState(nodeId, name) {
+    const node = this.nodeById(nodeId);
+    if (!node) return null;
+    const st = {
+      id: uid('s'),
+      name: name || ('状态 ' + ((node.states ? node.states.length : 0) + 1)),
+      style: {}
+    };
+    this.mutate(() => {
+      if (!node.states) node.states = [];
+      node.states.push(st);
+      node.activeStateId = st.id;
+    }, { reason: 'state' });
+    return st;
+  }
+
+  setActiveState(nodeId, stateId) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    this.mutate(() => { node.activeStateId = stateId; }, { reason: 'state' });
+  }
+
+  removeState(nodeId, stateId) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    this.mutate(() => {
+      node.states = node.states.filter((s) => s.id !== stateId);
+      if (!node.states.length) { node.states = null; node.activeStateId = null; return; }
+      if (node.activeStateId === stateId) node.activeStateId = node.states[0].id;
+    }, { reason: 'state' });
+  }
+
+  renameState(nodeId, stateId, name) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    this.mutate(() => {
+      for (const s of node.states) if (s.id === stateId) s.name = name;
+    }, { reason: 'state' });
+  }
+
+  /** 把当前外观存进某个状态（覆盖该状态的 style） */
+  captureStateStyle(nodeId, stateId, keys) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    const style = {};
+    for (const k of keys) style[k] = node[k];
+    this.mutate(() => {
+      for (const s of node.states) if (s.id === stateId) s.style = style;
+    }, { reason: 'state' });
+  }
+
+  /* ---------- 剪贴板 ---------- */
+  copySelected() {
+    const nodes = this.selectedNodes;
+    if (!nodes.length) return 0;
+    this.clipboard = JSON.parse(JSON.stringify(nodes));
+    return nodes.length;
+  }
+
+  pasteClipboard() {
+    const cb = this.clipboard;
+    if (!cb || !cb.length) return 0;
+    const copies = cb.map((n) => {
+      const c = JSON.parse(JSON.stringify(n));
+      c.id = uid();
+      c.x = (c.x || 0) + 16;
+      c.y = (c.y || 0) + 16;
+      return c;
+    });
+    this.mutate(() => { this.page.nodes.push(...copies); }, { reason: 'paste' });
+    this.select(copies.map((c) => c.id));
+    this.clipboard = copies.map((c) => JSON.parse(JSON.stringify(c)));
+    return copies.length;
   }
 
   /* 层级 */

@@ -2,7 +2,7 @@
  * 节点渲染：把数据模型渲染成真实 DOM（画布与预览共用）
  */
 
-import { ICONS } from './model.js';
+import { ICONS, viewOf } from './model.js';
 
 function px(v) { return typeof v === 'number' ? v + 'px' : v; }
 
@@ -66,6 +66,7 @@ function flexCenter(el, dir) {
  * 创建节点的 DOM。opts.interactive=false 用于预览/导出（不带 pointer 事件）。
  */
 export function createNodeEl(node, opts = {}) {
+  node = viewOf(node);
   const el = document.createElement('div');
   el.className = 'node node-' + node.type;
   el.dataset.id = node.id;

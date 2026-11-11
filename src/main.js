@@ -8,8 +8,9 @@ import { createCanvas } from './canvas.js';
 import { renderPageList, renderLibrary } from './library.js';
 import { renderInspector } from './inspector.js';
 import { renderLinks, createPreviewRuntime } from './links.js';
-import { exportPagePNG, exportProjectJSON, readProjectFile, buildSpecText } from './io.js';
+import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, buildSpecText } from './io.js';
 import { renderAIPanel, generatePage } from './ai.js';
+import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
 import { buildAssignmentProject } from './presets.js';
 
 /* ---------------- DOM ---------------- */
@@ -145,21 +146,7 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
 
   if (act === 'preview') return openPreview();
   if (act === 'spec') return openSpec();
-  if (act === 'export-png') {
-    try {
-      await exportPagePNG(store.page, store.project.name);
-      toast('PNG 已导出');
-    } catch (err) {
-      console.error(err);
-      toast('导出失败：' + err.message);
-    }
-    return;
-  }
-  if (act === 'save') {
-    exportProjectJSON(store.project);
-    toast('项目 JSON 已保存');
-    return;
-  }
+  if (act === 'export') return openExportMenu();
   if (act === 'open') {
     const input = document.createElement('input');
     input.type = 'file';
@@ -222,6 +209,20 @@ window.addEventListener('keydown', (e) => {
   }
   if (meta && e.key.toLowerCase() === 'd') {
     e.preventDefault(); store.duplicateSelected(); return;
+  }
+  if (meta && e.key.toLowerCase() === 'c') {
+    if (store.state.selection.length) {
+      e.preventDefault();
+      const n = store.copySelected();
+      toast('已复制 ' + n + ' 个元素');
+    }
+    return;
+  }
+  if (meta && e.key.toLowerCase() === 'v') {
+    e.preventDefault();
+    const n = store.pasteClipboard();
+    if (n) toast('已粘贴 ' + n + ' 个元素');
+    return;
   }
   if (meta && e.key.toLowerCase() === 's') {
     e.preventDefault(); exportProjectJSON(store.project); toast('项目 JSON 已保存'); return;
@@ -297,6 +298,75 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 导出菜单 ---------------- */
+function openExportMenu() {
+  const pageCount = store.project.pages.length;
+  const items = [
+    {
+      label: '当前页 PNG（2 倍图）',
+      desc: '把「' + store.page.name + '」导出成图片，可直接贴进作业或文档',
+      run: async () => {
+        await exportPagePNG(store.page, store.project.name);
+        toast('已导出当前页 PNG');
+      }
+    },
+    {
+      label: '全部页面 PNG（' + pageCount + ' 张）',
+      desc: '逐页导出，浏览器会连续下载多个文件',
+      run: async () => {
+        const n = await exportAllPagesPNG(store.project, (i, total, name) => {
+          toast('导出中 ' + i + '/' + total + '：' + name);
+        });
+        toast('已导出 ' + n + ' 张 PNG');
+      }
+    },
+    {
+      label: '离线演示 HTML',
+      desc: '单文件，双击即演示，跳转/显隐/状态切换都能点，可以直接发给老师或同学',
+      run: () => {
+        const size = downloadStandaloneHtml(store.project);
+        toast('已导出演示 HTML（' + Math.round(size / 1024) + ' KB）');
+      }
+    },
+    {
+      label: '项目 JSON',
+      desc: '源文件，之后可再导入继续编辑',
+      run: () => {
+        exportProjectJSON(store.project);
+        toast('项目 JSON 已保存');
+      }
+    }
+  ];
+
+  openModal('导出 / 交付', () => {
+    const wrap = document.createElement('div');
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:12px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;';
+      row.addEventListener('mouseenter', () => { row.style.borderColor = 'var(--accent)'; });
+      row.addEventListener('mouseleave', () => { row.style.borderColor = 'var(--line)'; });
+
+      const box = document.createElement('div');
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:13px;color:var(--text)';
+      title.textContent = it.label;
+      const desc = document.createElement('div');
+      desc.style.cssText = 'font-size:11px;color:var(--text-dim);margin-top:3px';
+      desc.textContent = it.desc;
+      box.appendChild(title);
+      box.appendChild(desc);
+      row.appendChild(box);
+
+      row.addEventListener('click', async () => {
+        closeModal();
+        try { await it.run(); } catch (e) { toast('失败：' + e.message); }
+      });
+      wrap.appendChild(row);
+    }
+    return wrap;
+  });
+}
 
 /* ---------------- 规格 ---------------- */
 function openSpec() {

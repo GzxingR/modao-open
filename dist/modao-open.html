@@ -493,8 +493,7 @@ textarea.full {
       <button class="tb ai" data-act="ai" title="AI 生成（自带 API Key）">AI 生成</button>
       <button class="tb" data-act="preview" title="预览演示">预览</button>
       <button class="tb" data-act="spec" title="生成规格清单">规格</button>
-      <button class="tb" data-act="export-png" title="导出当前页 PNG">导出 PNG</button>
-      <button class="tb" data-act="save" title="保存到本地文件">保存</button>
+      <button class="tb" data-act="export" title="导出 PNG / 演示 HTML / 项目 JSON">导出</button>
       <button class="tb" data-act="open" title="打开项目文件">打开</button>
     </div>
   </header>
@@ -767,10 +766,40 @@ function baseNode(type, device) {
     paddingX: 0,
     locked: false,
     hidden: false,
+    // 组件状态（墨刀式动态组件的轻量实现：外观变体）
+    states: null,        // [{ id, name, style: { bg, text, color, ... } }]
+    activeStateId: null,
     // 交互（墨刀式）：点击后做什么
     link: null
   };
 }
+
+/** 取节点当前生效的状态对象（没有状态则返回 null） */
+function currentState(node) {
+  if (!node || !node.states || !node.states.length) return null;
+  for (const s of node.states) if (s.id === node.activeStateId) return s;
+  return node.states[0];
+}
+
+/** 取"叠加了当前状态外观"的节点视图；不修改原对象 */
+function viewOf(node) {
+  const st = currentState(node);
+  if (!st || !st.style) return node;
+  const merged = Object.assign({}, node, st.style);
+  merged.id = node.id;
+  merged.type = node.type;
+  merged.x = node.x;
+  merged.y = node.y;
+  merged.w = node.w;
+  merged.h = node.h;
+  merged.states = node.states;
+  merged.activeStateId = node.activeStateId;
+  merged.link = node.link;
+  return merged;
+}
+
+/** 组件状态可选的外观字段（限制范围，避免状态改到位置尺寸） */
+const STATE_STYLE_KEYS = ['text', 'bg', 'color', 'radius', 'fontSize', 'fontWeight', 'borderColor', 'borderWidth', 'align', 'opacity', 'icon', 'checked', 'on', 'activeIndex'];
 
 function createNode(type, device, patch = {}) {
   const def = getComponent(type);
@@ -867,6 +896,7 @@ class Store {
     this.listeners = new Set();
     this.undoStack = [];
     this.redoStack = [];
+    this.clipboard = [];
     this.pending = false;
     this.maxHistory = 80;
   }
@@ -969,7 +999,8 @@ class Store {
   addNode(type, patch = {}) {
     const device = this.device;
     const node = createNode(type, device, patch);
-    node.y = this.nextFreeY(node.h);
+    // 只有调用方没指定 y 时才自动找空位（拖放到画布时必须尊重落点）
+    if (patch.y === undefined) node.y = this.nextFreeY(node.h);
     this.mutate((project) => {
       const page = this.page;
       page.nodes.push(node);
@@ -1026,6 +1057,82 @@ class Store {
     });
     this.mutate(() => { this.page.nodes.push(...copies); }, { reason: 'duplicate' });
     this.select(copies.map((c) => c.id));
+  }
+
+  /* ---------- 组件状态（动态组件 · 外观变体） ---------- */
+  addState(nodeId, name) {
+    const node = this.nodeById(nodeId);
+    if (!node) return null;
+    const st = {
+      id: uid('s'),
+      name: name || ('状态 ' + ((node.states ? node.states.length : 0) + 1)),
+      style: {}
+    };
+    this.mutate(() => {
+      if (!node.states) node.states = [];
+      node.states.push(st);
+      node.activeStateId = st.id;
+    }, { reason: 'state' });
+    return st;
+  }
+
+  setActiveState(nodeId, stateId) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    this.mutate(() => { node.activeStateId = stateId; }, { reason: 'state' });
+  }
+
+  removeState(nodeId, stateId) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    this.mutate(() => {
+      node.states = node.states.filter((s) => s.id !== stateId);
+      if (!node.states.length) { node.states = null; node.activeStateId = null; return; }
+      if (node.activeStateId === stateId) node.activeStateId = node.states[0].id;
+    }, { reason: 'state' });
+  }
+
+  renameState(nodeId, stateId, name) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    this.mutate(() => {
+      for (const s of node.states) if (s.id === stateId) s.name = name;
+    }, { reason: 'state' });
+  }
+
+  /** 把当前外观存进某个状态（覆盖该状态的 style） */
+  captureStateStyle(nodeId, stateId, keys) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.states) return;
+    const style = {};
+    for (const k of keys) style[k] = node[k];
+    this.mutate(() => {
+      for (const s of node.states) if (s.id === stateId) s.style = style;
+    }, { reason: 'state' });
+  }
+
+  /* ---------- 剪贴板 ---------- */
+  copySelected() {
+    const nodes = this.selectedNodes;
+    if (!nodes.length) return 0;
+    this.clipboard = JSON.parse(JSON.stringify(nodes));
+    return nodes.length;
+  }
+
+  pasteClipboard() {
+    const cb = this.clipboard;
+    if (!cb || !cb.length) return 0;
+    const copies = cb.map((n) => {
+      const c = JSON.parse(JSON.stringify(n));
+      c.id = uid();
+      c.x = (c.x || 0) + 16;
+      c.y = (c.y || 0) + 16;
+      return c;
+    });
+    this.mutate(() => { this.page.nodes.push(...copies); }, { reason: 'paste' });
+    this.select(copies.map((c) => c.id));
+    this.clipboard = copies.map((c) => JSON.parse(JSON.stringify(c)));
+    return copies.length;
   }
 
   /* 层级 */
@@ -1284,6 +1391,7 @@ function flexCenter(el, dir) {
  * 创建节点的 DOM。opts.interactive=false 用于预览/导出（不带 pointer 事件）。
  */
 function createNodeEl(node, opts = {}) {
+  node = viewOf(node);
   const el = document.createElement('div');
   el.className = 'node node-' + node.type;
   el.dataset.id = node.id;
@@ -2219,6 +2327,7 @@ function renderInspector(container, store, handlers) {
   const actions = [
     { value: 'none', label: '无交互' },
     { value: 'navigate', label: '点击跳转页面' },
+    { value: 'state', label: '点击切换组件状态' },
     { value: 'show', label: '点击显示目标' },
     { value: 'hide', label: '点击隐藏目标' },
     { value: 'toggle', label: '点击切换目标' }
@@ -2244,6 +2353,44 @@ function renderInspector(container, store, handlers) {
       }
       pageSelect.addEventListener('change', () => handlers.update(node.id, { link: { action: 'navigate', targetPageId: pageSelect.value } }));
       linkRows.push(el('div', { class: 'row' }, [pageSelect]));
+    }
+  } else if (currentAction === 'state') {
+    const targets = store.page.nodes.filter((n) => n.id !== node.id && n.states && n.states.length);
+    if (!targets.length) {
+      linkRows.push(el('div', { class: 'empty-hint', text: '本页还没有带状态的组件。先选中一个组件，在下面「组件状态」里添加状态。' }));
+    } else {
+      const nodeSelect = el('select');
+      for (const n of targets) {
+        const o = el('option', { value: n.id, text: (n.name || n.type) + ' · ' + n.states.length + ' 个状态' });
+        if (node.link && node.link.targetNodeId === n.id) o.selected = true;
+        nodeSelect.appendChild(o);
+      }
+      linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
+
+      const currentTargetId = (node.link && node.link.targetNodeId) || targets[0].id;
+      const targetNode = targets.find((n) => n.id === currentTargetId) || targets[0];
+
+      const stateSelect = el('select');
+      const loopOpt = el('option', { value: '', text: '循环切到下一个状态' });
+      stateSelect.appendChild(loopOpt);
+      for (const st of targetNode.states) {
+        const o = el('option', { value: st.id, text: st.name });
+        if (node.link && node.link.targetStateId === st.id) o.selected = true;
+        stateSelect.appendChild(o);
+      }
+      linkRows.push(el('div', { class: 'row' }, [stateSelect]));
+
+      const apply = (patch) => handlers.update(node.id, { link: patch });
+      nodeSelect.addEventListener('change', () => {
+        apply({ action: 'state', targetNodeId: nodeSelect.value, targetStateId: null });
+      });
+      stateSelect.addEventListener('change', () => {
+        apply({
+          action: 'state',
+          targetNodeId: currentTargetId,
+          targetStateId: stateSelect.value || null
+        });
+      });
     }
   } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle') {
     const nodeSelect = el('select');
@@ -2272,6 +2419,62 @@ function renderInspector(container, store, handlers) {
   });
 
   container.appendChild(group('交互（预览时生效）', linkRows));
+
+  /* ---------- 组件状态（动态组件 · 外观变体） ---------- */
+  const stateRows = [];
+  const curState = currentState(node);
+  if (node.states && node.states.length) {
+    stateRows.push(el('div', {
+      class: 'empty-hint',
+      style: { padding: '0 2px 6px' },
+      text: '当前状态：' + (curState ? curState.name : '—') + '　点“存”把现在的外观存进该状态。'
+    }));
+    for (const st of node.states) {
+      const row = el('div', { class: 'row' });
+      const nameWrap = el('div', { class: 'field', style: { flex: '1' } });
+      const input = el('input', { type: 'text', value: st.name });
+      input.addEventListener('change', () => {
+        store.renameState(node.id, st.id, input.value.trim() || st.name);
+      });
+      nameWrap.appendChild(input);
+      row.appendChild(nameWrap);
+
+      const isCur = curState && curState.id === st.id;
+      const curBtn = el('button', { class: 'mini', text: isCur ? '●' : '○', title: '设为当前状态' });
+      curBtn.addEventListener('click', () => store.setActiveState(node.id, st.id));
+      row.appendChild(curBtn);
+
+      const saveBtn = el('button', { class: 'mini', text: '存', title: '把当前外观存进这个状态' });
+      saveBtn.addEventListener('click', () => {
+        store.captureStateStyle(node.id, st.id, STATE_STYLE_KEYS);
+        handlers.toast('外观已存进「' + st.name + '」');
+      });
+      row.appendChild(saveBtn);
+
+      const delBtn = el('button', { class: 'mini', text: '✕', title: '删除状态' });
+      delBtn.addEventListener('click', () => store.removeState(node.id, st.id));
+      row.appendChild(delBtn);
+
+      stateRows.push(row);
+    }
+  } else {
+    stateRows.push(el('div', {
+      class: 'empty-hint',
+      text: '添加状态后，这个组件可以有多套外观，交互里就能选「点击切换组件状态」。'
+    }));
+  }
+
+  const addStateBtn = el('button', { class: 'tb', text: '＋ 添加组件状态' });
+  addStateBtn.style.width = '100%';
+  addStateBtn.addEventListener('click', () => {
+    const st = store.addState(node.id);
+    if (st) {
+      store.captureStateStyle(node.id, st.id, STATE_STYLE_KEYS);
+      handlers.toast('已添加状态：' + st.name);
+    }
+  });
+  stateRows.push(el('div', { class: 'row' }, [addStateBtn]));
+  container.appendChild(group('组件状态（动态组件）', stateRows));
 
   /* ---------- 排列 ---------- */
   container.appendChild(group('排列', [
@@ -2334,6 +2537,16 @@ function renderLinks(layer, store) {
       if (!target) continue;
       to = { x: device.w - 10, y: from.y };
       label = '→ ' + target.name;
+    } else if (node.link.action === 'state') {
+      const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
+      if (!target) continue;
+      to = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
+      let stName = '下一个状态';
+      if (node.link.targetStateId && target.states) {
+        const st = target.states.find((s) => s.id === node.link.targetStateId);
+        if (st) stName = st.name;
+      }
+      label = '切状态 → ' + stName;
     } else {
       const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
       if (!target) continue;
@@ -2360,6 +2573,9 @@ function renderLinks(layer, store) {
     text.setAttribute('x', String(node.link.action === 'navigate' ? Math.max(8, to.x - 96) : to.x + 6));
     text.setAttribute('y', String(to.y - 6));
     text.setAttribute('fill', '#1677ff');
+    text.setAttribute('stroke', 'rgba(255,255,255,0.92)');
+    text.setAttribute('stroke-width', '3');
+    text.setAttribute('paint-order', 'stroke');
     text.setAttribute('font-size', '10');
     text.setAttribute('font-family', 'Microsoft YaHei, sans-serif');
     text.textContent = label;
@@ -2373,7 +2589,8 @@ function renderLinks(layer, store) {
 }
 
 /**
- * 预览运行时：可点击跳转 / 显隐 / 切换。
+ * 预览运行时：页面跳转、显隐切换、组件状态切换。
+ * project 传进来的应是深拷贝，运行时允许改动其 activeStateId。
  */
 function createPreviewRuntime(project, startPageId, mount) {
   let currentPageId = startPageId;
@@ -2386,27 +2603,85 @@ function createPreviewRuntime(project, startPageId, mount) {
   function render() {
     const page = pageById(currentPageId);
     mount.textContent = '';
+
+    const dev = page.device || { w: 402, h: 874 };
     const host = document.createElement('div');
     host.style.position = 'relative';
-    host.style.width = page.w ? page.w + 'px' : '100%';
-    host.style.height = page.h ? page.h + 'px' : '100%';
+    host.style.width = dev.w + 'px';
+    host.style.height = dev.h + 'px';
     host.style.background = page.bg || '#ffffff';
     host.style.overflow = 'hidden';
 
-    const device = page.device || null;
-    host.style.width = (device ? device.w : 402) + 'px';
-    host.style.height = (device ? device.h : 874) + 'px';
-
     const nodeEls = new Map();
+
+    function bind(node, el) {
+      el.style.cursor = node.link ? 'pointer' : 'default';
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        runLink(node);
+      });
+    }
+
+    function rerenderNode(node) {
+      const old = nodeEls.get(node.id);
+      if (!old) return;
+      const fresh = createNodeEl(node, { interactive: true });
+      if (hiddenState.get(node.id) === true) fresh.style.display = 'none';
+      bind(node, fresh);
+      old.replaceWith(fresh);
+      nodeEls.set(node.id, fresh);
+    }
+
+    function runLink(node) {
+      const link = node.link;
+      if (!link || !link.action || link.action === 'none') return;
+
+      if (link.action === 'navigate') {
+        if (link.targetPageId && link.targetPageId !== page.id) {
+          currentPageId = link.targetPageId;
+          hiddenState.clear();
+          render();
+        }
+        return;
+      }
+
+      const target = page.nodes.find((n) => n.id === link.targetNodeId);
+      if (!target) return;
+
+      if (link.action === 'state') {
+        if (!target.states || !target.states.length) return;
+        if (link.targetStateId) {
+          target.activeStateId = link.targetStateId;
+        } else {
+          const idx = target.states.findIndex((s) => s.id === target.activeStateId);
+          const next = target.states[(idx + 1) % target.states.length];
+          target.activeStateId = next.id;
+        }
+        rerenderNode(target);
+        return;
+      }
+
+      const el = nodeEls.get(target.id);
+      if (!el) return;
+
+      if (link.action === 'show') {
+        el.style.display = '';
+        hiddenState.set(target.id, false);
+      } else if (link.action === 'hide') {
+        el.style.display = 'none';
+        hiddenState.set(target.id, true);
+      } else if (link.action === 'toggle') {
+        const isHidden = el.style.display === 'none';
+        el.style.display = isHidden ? '' : 'none';
+        hiddenState.set(target.id, !isHidden);
+      }
+    }
+
     for (const node of page.nodes) {
       if (node.hidden) continue;
       const el = createNodeEl(node, { interactive: true });
-      el.style.cursor = node.link ? 'pointer' : 'default';
       if (hiddenState.get(node.id) === true) el.style.display = 'none';
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        runLink(node, page, nodeEls);
-      });
+      bind(node, el);
       host.appendChild(el);
       nodeEls.set(node.id, el);
     }
@@ -2414,39 +2689,13 @@ function createPreviewRuntime(project, startPageId, mount) {
     mount.appendChild(host);
   }
 
-  function runLink(node, page, nodeEls) {
-    const link = node.link;
-    if (!link || !link.action || link.action === 'none') return;
-
-    if (link.action === 'navigate') {
-      if (link.targetPageId && link.targetPageId !== page.id) {
-        currentPageId = link.targetPageId;
-        hiddenState.clear();
-        render();
-      }
-      return;
-    }
-
-    const targetEl = nodeEls.get(link.targetNodeId);
-    if (!targetEl) return;
-    const id = link.targetNodeId;
-
-    if (link.action === 'show') {
-      targetEl.style.display = '';
-      hiddenState.set(id, false);
-    } else if (link.action === 'hide') {
-      targetEl.style.display = 'none';
-      hiddenState.set(id, true);
-    } else if (link.action === 'toggle') {
-      const isHidden = targetEl.style.display === 'none';
-      targetEl.style.display = isHidden ? '' : 'none';
-      hiddenState.set(id, !isHidden);
-    }
-  }
-
   return {
     start() { render(); },
-    restart() { currentPageId = startPageId; hiddenState.clear(); render(); },
+    restart() {
+      currentPageId = startPageId;
+      hiddenState.clear();
+      render();
+    },
     currentPage() { return pageById(currentPageId); }
   };
 }
@@ -2513,6 +2762,26 @@ async function renderPageToDataURL(page) {
   });
 
   return { dataUrl, width: device.w * 2, height: device.h * 2 };
+}
+
+/** 批量导出所有页面 PNG（间隔触发，避免浏览器拦截多文件下载） */
+async function exportAllPagesPNG(project, onProgress) {
+  const pages = project.pages;
+  let ok = 0;
+  for (let i = 0; i < pages.length; i += 1) {
+    const page = pages[i];
+    if (onProgress) onProgress(i + 1, pages.length, page.name);
+    const { dataUrl } = await renderPageToDataURL(page);
+    const base64 = dataUrl.split(',')[1];
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let k = 0; k < bin.length; k += 1) bytes[k] = bin.charCodeAt(k);
+    const name = safeName(project.name + '-' + (i + 1) + '-' + page.name) + '.png';
+    downloadBlob(new Blob([bytes], { type: 'image/png' }), name);
+    ok += 1;
+    await new Promise((r) => setTimeout(r, 420));
+  }
+  return ok;
 }
 
 /** 把页面导出成 PNG 文件 */
@@ -2590,6 +2859,198 @@ function typeLabel(type) {
     navbar: '导航栏', tabbar: '标签栏'
   };
   return map[type] || type;
+}
+
+/* ===== src/exportHtml.js ===== */
+/**
+ * 导出离线演示 HTML：单文件、含全部页面与交互，双击就能演示，也可以发给别人。
+ * 做法：每页用真实渲染器生成静态 DOM（样式已内联），再把跳转/显隐/状态切换的元数据
+ * 写进 data-* 属性，附一段极小运行时。
+ */
+
+
+
+
+function escapeAttr(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function nodeHtml(node, overrideStateId) {
+  const view = overrideStateId ? Object.assign({}, node, { activeStateId: overrideStateId }) : node;
+  const el = createNodeEl(view, { interactive: true });
+  el.dataset.id = node.id;
+  const link = node.link;
+  if (link && link.action && link.action !== 'none') {
+    el.dataset.la = link.action;
+    if (link.targetPageId) el.dataset.lp = link.targetPageId;
+    if (link.targetNodeId) el.dataset.ln = link.targetNodeId;
+    if (link.targetStateId) el.dataset.ls = link.targetStateId;
+    el.style.cursor = 'pointer';
+  }
+  return el.outerHTML;
+}
+
+function pagePayload(page) {
+  const device = getDevice(page.deviceId);
+  const nodes = [];
+  for (const node of page.nodes) {
+    if (node.hidden) continue;
+    const item = { id: node.id, html: nodeHtml(node) };
+    if (node.states && node.states.length) {
+      item.states = {};
+      for (const st of node.states) item.states[st.id] = nodeHtml(node, st.id);
+      item.active = node.activeStateId || node.states[0].id;
+    }
+    nodes.push(item);
+  }
+  return {
+    id: page.id,
+    name: page.name,
+    w: device.w,
+    h: device.h,
+    bg: page.bg || '#ffffff',
+    nodes
+  };
+}
+
+const RUNTIME = `
+(function () {
+  var D = window.__PROTO__;
+  var stage = document.getElementById('stage');
+  var cur = D.startPageId;
+  var pages = {};
+  D.pages.forEach(function (p) {
+    var box = document.createElement('div');
+    box.className = 'pg';
+    box.dataset.pg = p.id;
+    box.style.width = p.w + 'px';
+    box.style.height = p.h + 'px';
+    box.style.background = p.bg;
+    box.style.position = 'relative';
+    box.style.overflow = 'hidden';
+    pages[p.id] = p;
+    p.nodes.forEach(function (n) {
+      var holder = document.createElement('div');
+      holder.innerHTML = n.html;
+      var el = holder.firstElementChild;
+      if (el) box.appendChild(el);
+    });
+    stage.appendChild(box);
+  });
+
+  function show(id) {
+    cur = id;
+    Array.prototype.forEach.call(stage.children, function (box) {
+      box.style.display = box.dataset.pg === id ? 'block' : 'none';
+    });
+    fit();
+  }
+
+  function fit() {
+    var p = pages[cur];
+    if (!p) return;
+    var pad = 48;
+    var s = Math.min(1, (window.innerWidth - pad) / p.w, (window.innerHeight - pad) / p.h);
+    stage.style.transform = 'scale(' + s + ')';
+  }
+
+  window.addEventListener('resize', fit);
+
+  stage.addEventListener('click', function (e) {
+    var el = e.target;
+    while (el && el !== stage && !(el.dataset && el.dataset.la)) el = el.parentElement;
+    if (!el || !el.dataset || !el.dataset.la) return;
+    var act = el.dataset.la;
+    if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
+    var lp = el.closest ? el.closest('.pg') : null;
+    if (!lp) return;
+    if (act === 'state') {
+      var nodeId = el.dataset.ln;
+      var target = lp.querySelector('[data-id="' + nodeId + '"]');
+      if (!target) return;
+      var p = pages[lp.dataset.pg];
+      var nd = null;
+      for (var i = 0; i < p.nodes.length; i++) if (p.nodes[i].id === nodeId) nd = p.nodes[i];
+      if (!nd || !nd.states) return;
+      var nextId = el.dataset.ls;
+      if (!nextId) {
+        var curId = target.dataset.state || nd.active;
+        var ids = Object.keys(nd.states);
+        var idx = ids.indexOf(curId);
+        nextId = ids[(idx + 1) % ids.length];
+      }
+      var holder = document.createElement('div');
+      holder.innerHTML = nd.states[nextId];
+      var fresh = holder.firstElementChild;
+      if (!fresh) return;
+      fresh.dataset.state = nextId;
+      target.replaceWith(fresh);
+      return;
+    }
+    var nodeId2 = el.dataset.ln;
+    var t2 = lp.querySelector('[data-id="' + nodeId2 + '"]');
+    if (!t2) return;
+    if (act === 'show') t2.style.display = '';
+    else if (act === 'hide') t2.style.display = 'none';
+    else if (act === 'toggle') t2.style.display = (t2.style.display === 'none' ? '' : 'none');
+  });
+
+  show(D.startPageId);
+})();
+`;
+
+function buildStandaloneHtml(project) {
+  const pages = project.pages.map(pagePayload);
+  const data = {
+    name: project.name || '原型',
+    startPageId: project.activePageId || (pages[0] && pages[0].id),
+    pages
+  };
+
+  const first = pages[0] || { w: 402, h: 874 };
+  const title = project.name || '原型演示';
+
+  return [
+    '<!DOCTYPE html>',
+    '<html lang="zh-CN">',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<title>' + escapeAttr(title) + ' · 原型演示</title>',
+    '<style>',
+    'html,body{margin:0;height:100%;background:#0d1014;overflow:hidden;}',
+    'body{display:flex;align-items:center;justify-content:center;font-family:"Microsoft YaHei","PingFang SC",sans-serif;}',
+    '#stage{transform-origin:center center;box-shadow:0 12px 48px rgba(0,0,0,.6);background:#fff;}',
+    '.pg{position:relative;}',
+    '.node{cursor:default;}',
+    '.node[data-la]{cursor:pointer;}',
+    '#hint{position:fixed;left:0;right:0;bottom:10px;text-align:center;color:#6b7280;font-size:12px;}',
+    '</style>',
+    '</head>',
+    '<body>',
+    '<div id="stage"></div>',
+    '<div id="hint">' + escapeAttr(title) + ' · 共 ' + pages.length + ' 页 · 点击可交互元素继续</div>',
+    '<script>window.__PROTO__ = ' + JSON.stringify(data) + ';<\/script>',
+    '<script>' + RUNTIME + '<\/script>',
+    '</body>',
+    '</html>'
+  ].join('\n');
+}
+
+function downloadStandaloneHtml(project) {
+  const html = buildStandaloneHtml(project);
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = String(project.name || 'prototype').replace(/[\\/:*?"<>|]+/g, '_') + '-demo.html';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return html.length;
 }
 
 /* ===== src/ai.js ===== */
@@ -2796,7 +3257,13 @@ function loginPage(p) {
     x: 41, y: 364, w: 320, h: 48, text: '请输入密码', radius: 8
   }));
   p.nodes.push(createNode('button', dev, {
-    x: 41, y: 436, w: 320, h: 44, text: '登录', bg: '#1677ff', radius: 8
+    x: 41, y: 436, w: 320, h: 44, text: '登录', bg: '#1677ff', radius: 8,
+    states: [
+      { id: 'st-normal', name: '常态', style: { bg: '#1677ff', text: '登录', color: '#ffffff' } },
+      { id: 'st-pressed', name: '按下态', style: { bg: '#0b5cd5', text: '登录中…', color: '#ffffff' } }
+    ],
+    activeStateId: 'st-normal',
+    link: { action: 'state', targetNodeId: null, targetStateId: 'st-pressed' }
   }));
   p.nodes.push(createNode('text', dev, {
     x: 41, y: 496, w: 320, h: 20, text: '忘记密码', fontSize: 14, color: '#1677ff', align: 'right'
@@ -2875,10 +3342,16 @@ function buildAssignmentProject() {
     page('退出确认弹窗', 'iphone14', dialogPage),
     page('商品详情页', 'iphone14', goodsPage)
   ];
-  // 给按钮挂上跳转，方便演示交互
+  // 演示两类交互：按钮切自己的组件状态，文字跳页
   const login = pages[0];
   const btn = login.nodes.find((n) => n.type === 'button');
-  if (btn) btn.link = { action: 'navigate', targetPageId: pages[1].id };
+  if (btn) {
+    btn.link = { action: 'state', targetNodeId: btn.id, targetStateId: 'st-pressed' };
+  }
+  const forget = login.nodes.find((n) => n.type === 'text' && n.text === '忘记密码');
+  if (forget) {
+    forget.link = { action: 'navigate', targetPageId: pages[1].id };
+  }
 
   return {
     version: 1,
@@ -2893,6 +3366,7 @@ function buildAssignmentProject() {
 /**
  * 入口装配：工具栏、快捷键、拖放、预览、导入导出、AI
  */
+
 
 
 
@@ -3037,21 +3511,7 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
 
   if (act === 'preview') return openPreview();
   if (act === 'spec') return openSpec();
-  if (act === 'export-png') {
-    try {
-      await exportPagePNG(store.page, store.project.name);
-      toast('PNG 已导出');
-    } catch (err) {
-      console.error(err);
-      toast('导出失败：' + err.message);
-    }
-    return;
-  }
-  if (act === 'save') {
-    exportProjectJSON(store.project);
-    toast('项目 JSON 已保存');
-    return;
-  }
+  if (act === 'export') return openExportMenu();
   if (act === 'open') {
     const input = document.createElement('input');
     input.type = 'file';
@@ -3114,6 +3574,20 @@ window.addEventListener('keydown', (e) => {
   }
   if (meta && e.key.toLowerCase() === 'd') {
     e.preventDefault(); store.duplicateSelected(); return;
+  }
+  if (meta && e.key.toLowerCase() === 'c') {
+    if (store.state.selection.length) {
+      e.preventDefault();
+      const n = store.copySelected();
+      toast('已复制 ' + n + ' 个元素');
+    }
+    return;
+  }
+  if (meta && e.key.toLowerCase() === 'v') {
+    e.preventDefault();
+    const n = store.pasteClipboard();
+    if (n) toast('已粘贴 ' + n + ' 个元素');
+    return;
   }
   if (meta && e.key.toLowerCase() === 's') {
     e.preventDefault(); exportProjectJSON(store.project); toast('项目 JSON 已保存'); return;
@@ -3189,6 +3663,75 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 导出菜单 ---------------- */
+function openExportMenu() {
+  const pageCount = store.project.pages.length;
+  const items = [
+    {
+      label: '当前页 PNG（2 倍图）',
+      desc: '把「' + store.page.name + '」导出成图片，可直接贴进作业或文档',
+      run: async () => {
+        await exportPagePNG(store.page, store.project.name);
+        toast('已导出当前页 PNG');
+      }
+    },
+    {
+      label: '全部页面 PNG（' + pageCount + ' 张）',
+      desc: '逐页导出，浏览器会连续下载多个文件',
+      run: async () => {
+        const n = await exportAllPagesPNG(store.project, (i, total, name) => {
+          toast('导出中 ' + i + '/' + total + '：' + name);
+        });
+        toast('已导出 ' + n + ' 张 PNG');
+      }
+    },
+    {
+      label: '离线演示 HTML',
+      desc: '单文件，双击即演示，跳转/显隐/状态切换都能点，可以直接发给老师或同学',
+      run: () => {
+        const size = downloadStandaloneHtml(store.project);
+        toast('已导出演示 HTML（' + Math.round(size / 1024) + ' KB）');
+      }
+    },
+    {
+      label: '项目 JSON',
+      desc: '源文件，之后可再导入继续编辑',
+      run: () => {
+        exportProjectJSON(store.project);
+        toast('项目 JSON 已保存');
+      }
+    }
+  ];
+
+  openModal('导出 / 交付', () => {
+    const wrap = document.createElement('div');
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:12px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;';
+      row.addEventListener('mouseenter', () => { row.style.borderColor = 'var(--accent)'; });
+      row.addEventListener('mouseleave', () => { row.style.borderColor = 'var(--line)'; });
+
+      const box = document.createElement('div');
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:13px;color:var(--text)';
+      title.textContent = it.label;
+      const desc = document.createElement('div');
+      desc.style.cssText = 'font-size:11px;color:var(--text-dim);margin-top:3px';
+      desc.textContent = it.desc;
+      box.appendChild(title);
+      box.appendChild(desc);
+      row.appendChild(box);
+
+      row.addEventListener('click', async () => {
+        closeModal();
+        try { await it.run(); } catch (e) { toast('失败：' + e.message); }
+      });
+      wrap.appendChild(row);
+    }
+    return wrap;
+  });
+}
 
 /* ---------------- 规格 ---------------- */
 function openSpec() {

@@ -25,7 +25,13 @@ function loginPage(p) {
     x: 41, y: 364, w: 320, h: 48, text: '请输入密码', radius: 8
   }));
   p.nodes.push(createNode('button', dev, {
-    x: 41, y: 436, w: 320, h: 44, text: '登录', bg: '#1677ff', radius: 8
+    x: 41, y: 436, w: 320, h: 44, text: '登录', bg: '#1677ff', radius: 8,
+    states: [
+      { id: 'st-normal', name: '常态', style: { bg: '#1677ff', text: '登录', color: '#ffffff' } },
+      { id: 'st-pressed', name: '按下态', style: { bg: '#0b5cd5', text: '登录中…', color: '#ffffff' } }
+    ],
+    activeStateId: 'st-normal',
+    link: { action: 'state', targetNodeId: null, targetStateId: 'st-pressed' }
   }));
   p.nodes.push(createNode('text', dev, {
     x: 41, y: 496, w: 320, h: 20, text: '忘记密码', fontSize: 14, color: '#1677ff', align: 'right'
@@ -104,10 +110,16 @@ export function buildAssignmentProject() {
     page('退出确认弹窗', 'iphone14', dialogPage),
     page('商品详情页', 'iphone14', goodsPage)
   ];
-  // 给按钮挂上跳转，方便演示交互
+  // 演示两类交互：按钮切自己的组件状态，文字跳页
   const login = pages[0];
   const btn = login.nodes.find((n) => n.type === 'button');
-  if (btn) btn.link = { action: 'navigate', targetPageId: pages[1].id };
+  if (btn) {
+    btn.link = { action: 'state', targetNodeId: btn.id, targetStateId: 'st-pressed' };
+  }
+  const forget = login.nodes.find((n) => n.type === 'text' && n.text === '忘记密码');
+  if (forget) {
+    forget.link = { action: 'navigate', targetPageId: pages[1].id };
+  }
 
   return {
     version: 1,
