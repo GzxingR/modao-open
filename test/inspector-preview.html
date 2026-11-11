@@ -26,7 +26,8 @@ s.setActivePage(s.project.pages[0].id);
 s.updateNode(btn.id, {
   link: {
     action: 'navigate',
-    trigger: 'click',
+    trigger: 'keydown',
+    keyName: 'Enter',
     targetPageId: s.project.pages[1].id,
     condition: { varName: 'agree', op: 'eq', value: 'yes' }
   }
