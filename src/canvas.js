@@ -84,12 +84,34 @@ export function createCanvas(ctx) {
     }
 
     renderSelectionHandles();
+    renderInspectLabels();
     applyZoom();
 
     if (started) {
       canvasHost.dataset.lastRenderMs = (performance.now() - started).toFixed(2);
       canvasHost.dataset.lastRenderReused = String(reused);
       canvasHost.dataset.lastRenderCreated = String(created);
+    }
+  }
+
+  /** 标注模式：给每个元素挂尺寸标签（批量标注） */
+  function renderInspectLabels() {
+    const on = !!store.state.inspectMode;
+    canvasHost.classList.toggle('inspect', on);
+    for (const [id, el] of nodeEls) {
+      let lab = el.querySelector(':scope > .dim-label');
+      if (!on) {
+        if (lab) lab.remove();
+        continue;
+      }
+      const node = store.nodeById(id);
+      if (!node) continue;
+      if (!lab) {
+        lab = document.createElement('div');
+        lab.className = 'dim-label';
+        el.appendChild(lab);
+      }
+      lab.textContent = Math.round(node.w) + ' × ' + Math.round(node.h);
     }
   }
 

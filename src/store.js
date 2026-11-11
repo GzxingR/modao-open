@@ -694,6 +694,12 @@ export class Store {
       return true;
     } catch (e) {
       console.warn('[store] 读取本地项目失败', e);
+      // 把坏数据另存一份，避免下次直接覆盖掉用户仅有的痕迹
+      try {
+        const broken = localStorage.getItem(STORAGE_KEY);
+        if (broken) localStorage.setItem(STORAGE_KEY + ':broken', broken);
+      } catch (e2) { /* 忽略 */ }
+      this.state.lastLoadError = String((e && e.message) || e);
       return false;
     }
   }

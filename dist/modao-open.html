@@ -683,6 +683,46 @@ textarea.full {
   font-size: 11px;
 }
 
+/* ---------- 错误提示条 ---------- */
+.error-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #7a1f22;
+  color: #ffe1e2;
+  font-size: 12px;
+  border-bottom: 1px solid #a33337;
+}
+.error-bar[hidden] { display: none; }
+.error-bar span { flex: 1; }
+
+/* ---------- 标注模式：批量尺寸标注 ---------- */
+.canvas-host.inspect .node {
+  outline: 1px dashed rgba(22, 119, 255, 0.55);
+  outline-offset: 0;
+}
+.dim-label {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  background: #1677ff;
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
 /* ---------- 键盘焦点与触屏 ---------- */
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -758,6 +798,10 @@ button:focus:not(:focus-visible) { outline: none; }
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='2.5' width='16' height='19' rx='2.5' fill='%231677ff'/><rect x='7.5' y='11' width='9' height='3.4' rx='1' fill='white'/><rect x='7.5' y='16' width='9' height='3.4' rx='1' fill='white'/></svg>">
 </head>
 <body>
+  <div class="error-bar" id="errorBar" hidden>
+    <span id="errorText"></span>
+    <button class="mini" id="errorClose" title="关闭提示">✕</button>
+  </div>
 <div id="app">
 
   <header class="topbar">
@@ -2022,6 +2066,12 @@ class Store {
       return true;
     } catch (e) {
       console.warn('[store] 读取本地项目失败', e);
+      // 把坏数据另存一份，避免下次直接覆盖掉用户仅有的痕迹
+      try {
+        const broken = localStorage.getItem(STORAGE_KEY);
+        if (broken) localStorage.setItem(STORAGE_KEY + ':broken', broken);
+      } catch (e2) { /* 忽略 */ }
+      this.state.lastLoadError = String((e && e.message) || e);
       return false;
     }
   }
@@ -2918,12 +2968,34 @@ function createCanvas(ctx) {
     }
 
     renderSelectionHandles();
+    renderInspectLabels();
     applyZoom();
 
     if (started) {
       canvasHost.dataset.lastRenderMs = (performance.now() - started).toFixed(2);
       canvasHost.dataset.lastRenderReused = String(reused);
       canvasHost.dataset.lastRenderCreated = String(created);
+    }
+  }
+
+  /** 标注模式：给每个元素挂尺寸标签（批量标注） */
+  function renderInspectLabels() {
+    const on = !!store.state.inspectMode;
+    canvasHost.classList.toggle('inspect', on);
+    for (const [id, el] of nodeEls) {
+      let lab = el.querySelector(':scope > .dim-label');
+      if (!on) {
+        if (lab) lab.remove();
+        continue;
+      }
+      const node = store.nodeById(id);
+      if (!node) continue;
+      if (!lab) {
+        lab = document.createElement('div');
+        lab.className = 'dim-label';
+        el.appendChild(lab);
+      }
+      lab.textContent = Math.round(node.w) + ' × ' + Math.round(node.h);
     }
   }
 
@@ -3538,6 +3610,27 @@ function renderLayerList(container, store, handlers) {
 const CATEGORY_LABELS = { basic: '基础', form: '表单', layout: '布局', icon: '图标' };
 const CATEGORY_ORDER = ['basic', 'form', 'layout', 'icon'];
 
+/** 搜索同义词：搜这些词也能找到对应组件 */
+const LIB_TAGS = {
+  text: ['文字', '标题', '正文', 'label', 'title', 'heading'],
+  rect: ['方块', '方形', '背景', '容器', 'box', 'block'],
+  circle: ['圆', '椭圆', '圆形', 'dot', 'avatar'],
+  line: ['线', '分割', '分隔', 'divider', 'hr'],
+  image: ['图', '图片', '照片', 'picture', 'photo', 'img'],
+  button: ['按钮', '按键', '提交', 'btn', 'submit'],
+  input: ['输入', '输入框', '单行', 'input', 'field'],
+  textarea: ['多行', '文本域', '备注', 'textarea'],
+  checkbox: ['勾选', '复选框', '多选', 'check', 'checkbox'],
+  switch: ['开关', '切换', 'toggle', 'switch'],
+  icon: ['图标', '符号', 'icon', 'symbol'],
+  badge: ['标签', '徽标', '标记', 'badge', 'tag', 'chip'],
+  card: ['卡片', '卡', '弹窗', '对话框', '弹层', 'dialog', 'modal', 'card'],
+  listitem: ['列表', '列表项', '条目', 'list', 'item', 'row'],
+  navbar: ['导航', '标题栏', '顶栏', 'navbar', 'header', 'appbar'],
+  tabbar: ['标签栏', '底栏', 'tab', 'tabbar', 'bottom'],
+  group: ['分组', '组', '容器', 'group', 'overlay', '浮层']
+};
+
 function makeLibItem(comp, handlers) {
   const item = document.createElement('div');
   item.className = 'lib-item';
@@ -3578,7 +3671,10 @@ function renderLibrary(container, store, handlers, keyword) {
   const kw = String(keyword || '').trim().toLowerCase();
   const list = COMPONENTS.filter((c) => {
     if (!kw) return true;
-    return c.label.toLowerCase().indexOf(kw) >= 0 || c.type.toLowerCase().indexOf(kw) >= 0;
+    if (c.label.toLowerCase().indexOf(kw) >= 0) return true;
+    if (c.type.toLowerCase().indexOf(kw) >= 0) return true;
+    const tags = LIB_TAGS[c.type] || [];
+    return tags.some((t) => t.toLowerCase().indexOf(kw) >= 0);
   });
 
   if (!list.length) {
@@ -6012,6 +6108,22 @@ function toast(msg, action) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), action ? 5200 : 2000);
 }
 
+function showRenderError(err) {
+  const bar = document.getElementById('errorBar');
+  const txt = document.getElementById('errorText');
+  if (!bar || !txt) return;
+  txt.textContent = '渲染出错：' + ((err && err.message) || err) + '　数据没有丢，建议先「导出 → 项目 JSON」备份，再刷新页面。';
+  bar.hidden = false;
+}
+
+const errorCloseBtn = document.getElementById('errorClose');
+if (errorCloseBtn) {
+  errorCloseBtn.addEventListener('click', () => {
+    const bar = document.getElementById('errorBar');
+    if (bar) bar.hidden = true;
+  });
+}
+
 /* ---------------- 保存状态指示 ---------------- */
 let lastSaveError = null;
 function updateSaveIndicator(state) {
@@ -6132,18 +6244,23 @@ function renderAll(reason) {
 }
 
 store.subscribe((state, reason) => {
-  if (reason === 'zoom') {
-    zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
-    canvas.applyZoom();
+  try {
+    if (reason === 'zoom') {
+      zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
+      canvas.applyZoom();
+      scheduleViewSave();
+      return;
+    }
+    if (reason === 'save') {
+      updateSaveIndicator(state);
+      return;
+    }
+    renderAll(reason);
     scheduleViewSave();
-    return;
+  } catch (err) {
+    console.error('[render]', err);
+    showRenderError(err);
   }
-  if (reason === 'save') {
-    updateSaveIndicator(state);
-    return;
-  }
-  renderAll(reason);
-  scheduleViewSave();
 });
 
 /* 视图状态记忆：缩放 / 选中 / 滚动 */
@@ -6569,6 +6686,20 @@ function openExportMenu() {
       }
     },
     {
+      label: '当前页所有元素切图（' + store.page.nodes.filter((n) => !n.hidden).length + ' 个）',
+      desc: '逐个元素导出 2 倍图，文件名带类型和序号，适合要交「组件切图」的作业',
+      run: async () => {
+        const nodes = store.page.nodes.filter((n) => !n.hidden);
+        if (!nodes.length) { toast('本页还没有元素'); return; }
+        for (let i = 0; i < nodes.length; i += 1) {
+          toast('切图中 ' + (i + 1) + ' / ' + nodes.length);
+          await exportNodePNG(nodes[i], store.project.name);
+          await new Promise((r) => setTimeout(r, 220));
+        }
+        toast('已导出 ' + nodes.length + ' 张元素切图');
+      }
+    },
+    {
       label: '离线演示 HTML',
       desc: '单文件，双击即演示，跳转/显隐/状态切换都能点，可以直接发给老师或同学',
       run: () => {
@@ -6748,9 +6879,20 @@ function boot() {
   const view = (autoPreset || autoEmpty) ? null : loadViewState();
   const restored = view ? applyViewState(store, view) : null;
 
-  renderAll('boot');
-  initResizers();
-  ariaLabels();
+  if (/[?&]inspect=1/.test(location.search)) store.state.inspectMode = true;
+
+  try {
+    renderAll('boot');
+    initResizers();
+    ariaLabels();
+  } catch (err) {
+    console.error('[boot]', err);
+    showRenderError(err);
+  }
+
+  if (store.state.lastLoadError) {
+    toast('上次的项目数据读不出来（原始数据已另存备份），已新建空白项目');
+  }
   if (view) restoreScroll(stageScrollEl, view);
 
   if (/[?&]help=1/.test(location.search)) {

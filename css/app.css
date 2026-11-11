@@ -676,6 +676,46 @@ textarea.full {
   font-size: 11px;
 }
 
+/* ---------- 错误提示条 ---------- */
+.error-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #7a1f22;
+  color: #ffe1e2;
+  font-size: 12px;
+  border-bottom: 1px solid #a33337;
+}
+.error-bar[hidden] { display: none; }
+.error-bar span { flex: 1; }
+
+/* ---------- 标注模式：批量尺寸标注 ---------- */
+.canvas-host.inspect .node {
+  outline: 1px dashed rgba(22, 119, 255, 0.55);
+  outline-offset: 0;
+}
+.dim-label {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  background: #1677ff;
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
 /* ---------- 键盘焦点与触屏 ---------- */
 :focus-visible {
   outline: 2px solid var(--accent);

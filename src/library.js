@@ -168,6 +168,27 @@ export function renderLayerList(container, store, handlers) {
 const CATEGORY_LABELS = { basic: '基础', form: '表单', layout: '布局', icon: '图标' };
 const CATEGORY_ORDER = ['basic', 'form', 'layout', 'icon'];
 
+/** 搜索同义词：搜这些词也能找到对应组件 */
+const LIB_TAGS = {
+  text: ['文字', '标题', '正文', 'label', 'title', 'heading'],
+  rect: ['方块', '方形', '背景', '容器', 'box', 'block'],
+  circle: ['圆', '椭圆', '圆形', 'dot', 'avatar'],
+  line: ['线', '分割', '分隔', 'divider', 'hr'],
+  image: ['图', '图片', '照片', 'picture', 'photo', 'img'],
+  button: ['按钮', '按键', '提交', 'btn', 'submit'],
+  input: ['输入', '输入框', '单行', 'input', 'field'],
+  textarea: ['多行', '文本域', '备注', 'textarea'],
+  checkbox: ['勾选', '复选框', '多选', 'check', 'checkbox'],
+  switch: ['开关', '切换', 'toggle', 'switch'],
+  icon: ['图标', '符号', 'icon', 'symbol'],
+  badge: ['标签', '徽标', '标记', 'badge', 'tag', 'chip'],
+  card: ['卡片', '卡', '弹窗', '对话框', '弹层', 'dialog', 'modal', 'card'],
+  listitem: ['列表', '列表项', '条目', 'list', 'item', 'row'],
+  navbar: ['导航', '标题栏', '顶栏', 'navbar', 'header', 'appbar'],
+  tabbar: ['标签栏', '底栏', 'tab', 'tabbar', 'bottom'],
+  group: ['分组', '组', '容器', 'group', 'overlay', '浮层']
+};
+
 function makeLibItem(comp, handlers) {
   const item = document.createElement('div');
   item.className = 'lib-item';
@@ -208,7 +229,10 @@ export function renderLibrary(container, store, handlers, keyword) {
   const kw = String(keyword || '').trim().toLowerCase();
   const list = COMPONENTS.filter((c) => {
     if (!kw) return true;
-    return c.label.toLowerCase().indexOf(kw) >= 0 || c.type.toLowerCase().indexOf(kw) >= 0;
+    if (c.label.toLowerCase().indexOf(kw) >= 0) return true;
+    if (c.type.toLowerCase().indexOf(kw) >= 0) return true;
+    const tags = LIB_TAGS[c.type] || [];
+    return tags.some((t) => t.toLowerCase().indexOf(kw) >= 0);
   });
 
   if (!list.length) {

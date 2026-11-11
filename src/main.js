@@ -62,6 +62,22 @@ function toast(msg, action) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), action ? 5200 : 2000);
 }
 
+function showRenderError(err) {
+  const bar = document.getElementById('errorBar');
+  const txt = document.getElementById('errorText');
+  if (!bar || !txt) return;
+  txt.textContent = '渲染出错：' + ((err && err.message) || err) + '　数据没有丢，建议先「导出 → 项目 JSON」备份，再刷新页面。';
+  bar.hidden = false;
+}
+
+const errorCloseBtn = document.getElementById('errorClose');
+if (errorCloseBtn) {
+  errorCloseBtn.addEventListener('click', () => {
+    const bar = document.getElementById('errorBar');
+    if (bar) bar.hidden = true;
+  });
+}
+
 /* ---------------- 保存状态指示 ---------------- */
 let lastSaveError = null;
 function updateSaveIndicator(state) {
@@ -182,18 +198,23 @@ function renderAll(reason) {
 }
 
 store.subscribe((state, reason) => {
-  if (reason === 'zoom') {
-    zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
-    canvas.applyZoom();
+  try {
+    if (reason === 'zoom') {
+      zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
+      canvas.applyZoom();
+      scheduleViewSave();
+      return;
+    }
+    if (reason === 'save') {
+      updateSaveIndicator(state);
+      return;
+    }
+    renderAll(reason);
     scheduleViewSave();
-    return;
+  } catch (err) {
+    console.error('[render]', err);
+    showRenderError(err);
   }
-  if (reason === 'save') {
-    updateSaveIndicator(state);
-    return;
-  }
-  renderAll(reason);
-  scheduleViewSave();
 });
 
 /* 视图状态记忆：缩放 / 选中 / 滚动 */
@@ -619,6 +640,20 @@ function openExportMenu() {
       }
     },
     {
+      label: '当前页所有元素切图（' + store.page.nodes.filter((n) => !n.hidden).length + ' 个）',
+      desc: '逐个元素导出 2 倍图，文件名带类型和序号，适合要交「组件切图」的作业',
+      run: async () => {
+        const nodes = store.page.nodes.filter((n) => !n.hidden);
+        if (!nodes.length) { toast('本页还没有元素'); return; }
+        for (let i = 0; i < nodes.length; i += 1) {
+          toast('切图中 ' + (i + 1) + ' / ' + nodes.length);
+          await exportNodePNG(nodes[i], store.project.name);
+          await new Promise((r) => setTimeout(r, 220));
+        }
+        toast('已导出 ' + nodes.length + ' 张元素切图');
+      }
+    },
+    {
       label: '离线演示 HTML',
       desc: '单文件，双击即演示，跳转/显隐/状态切换都能点，可以直接发给老师或同学',
       run: () => {
@@ -798,9 +833,20 @@ function boot() {
   const view = (autoPreset || autoEmpty) ? null : loadViewState();
   const restored = view ? applyViewState(store, view) : null;
 
-  renderAll('boot');
-  initResizers();
-  ariaLabels();
+  if (/[?&]inspect=1/.test(location.search)) store.state.inspectMode = true;
+
+  try {
+    renderAll('boot');
+    initResizers();
+    ariaLabels();
+  } catch (err) {
+    console.error('[boot]', err);
+    showRenderError(err);
+  }
+
+  if (store.state.lastLoadError) {
+    toast('上次的项目数据读不出来（原始数据已另存备份），已新建空白项目');
+  }
   if (view) restoreScroll(stageScrollEl, view);
 
   if (/[?&]help=1/.test(location.search)) {
