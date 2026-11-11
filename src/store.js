@@ -239,6 +239,109 @@ export class Store {
     }, { reason: 'state' });
   }
 
+  /* ---------- 组合 / 解组 ---------- */
+  makeGroupNode(x, y, w, h) {
+    return {
+      id: uid('g'),
+      type: 'group',
+      name: '分组',
+      x, y, w, h,
+      rotation: 0,
+      opacity: 1,
+      bg: 'transparent',
+      radius: 0,
+      borderWidth: 0,
+      borderColor: '#e5e5e5',
+      shadow: 'none',
+      text: '',
+      fontSize: 16,
+      fontWeight: 400,
+      color: '#222222',
+      align: 'left',
+      verticalAlign: 'center',
+      lineHeight: 1.4,
+      paddingX: 0,
+      src: '',
+      locked: false,
+      hidden: false,
+      states: null,
+      activeStateId: null,
+      link: null,
+      children: []
+    };
+  }
+
+  /** 把当前选中的多个元素打成一个组 */
+  groupSelected() {
+    const nodes = this.selectedNodes;
+    if (nodes.length < 2) return null;
+
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+    for (const n of nodes) {
+      x1 = Math.min(x1, n.x);
+      y1 = Math.min(y1, n.y);
+      x2 = Math.max(x2, n.x + n.w);
+      y2 = Math.max(y2, n.y + n.h);
+    }
+
+    const group = this.makeGroupNode(Math.round(x1), Math.round(y1), Math.round(x2 - x1), Math.round(y2 - y1));
+    const ids = new Set(nodes.map((n) => n.id));
+
+    this.mutate(() => {
+      const page = this.page;
+      const kept = [];
+      for (const n of page.nodes) {
+        if (ids.has(n.id)) {
+          n.x = n.x - group.x;
+          n.y = n.y - group.y;
+          group.children.push(n);
+        } else {
+          kept.push(n);
+        }
+      }
+      kept.push(group);
+      page.nodes = kept;
+    }, { reason: 'group' });
+
+    this.select([group.id]);
+    return group;
+  }
+
+  /** 解散选中的组，子元素回到页面坐标 */
+  ungroupSelected() {
+    const groups = this.selectedNodes.filter((n) => n.type === 'group' && Array.isArray(n.children) && n.children.length);
+    if (!groups.length) return 0;
+    let count = 0;
+
+    this.mutate(() => {
+      const page = this.page;
+      const next = [];
+      for (const n of page.nodes) {
+        if (groups.indexOf(n) >= 0) {
+          for (const c of n.children) {
+            c.x = c.x + n.x;
+            c.y = c.y + n.y;
+            next.push(c);
+            count += 1;
+          }
+        } else {
+          next.push(n);
+        }
+      }
+      page.nodes = next;
+    }, { reason: 'ungroup' });
+
+    this.select([]);
+    return count;
+  }
+
+  isGrouped(node) {
+    return !!(node && node.type === 'group' && Array.isArray(node.children));
+  }
+
   /* ---------- 剪贴板 ---------- */
   copySelected() {
     const nodes = this.selectedNodes;

@@ -20,7 +20,8 @@ const LAYER_META = {
   card: { icon: '▤', label: '卡片' },
   listitem: { icon: '☰', label: '列表项' },
   navbar: { icon: '▔', label: '导航栏' },
-  tabbar: { icon: '▁', label: '标签栏' }
+  tabbar: { icon: '▁', label: '标签栏' },
+  group: { icon: '❐', label: '分组' }
 };
 
 /** 图层列表：当前页所有元素，最上层显示在最前 */
@@ -53,7 +54,11 @@ export function renderLayerList(container, store, handlers) {
     const name = document.createElement('span');
     name.className = 'l-name';
     const text = (node.text || '').replace(/\s+/g, ' ').trim();
-    name.textContent = (text ? text.slice(0, 14) : meta.label);
+    if (node.type === 'group') {
+      name.textContent = '分组（' + ((node.children && node.children.length) || 0) + '）';
+    } else {
+      name.textContent = (text ? text.slice(0, 14) : meta.label);
+    }
     name.title = meta.label + (text ? '：' + text : '');
     row.appendChild(name);
 

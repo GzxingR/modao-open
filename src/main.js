@@ -211,6 +211,17 @@ window.addEventListener('keydown', (e) => {
   if (meta && e.key.toLowerCase() === 'd') {
     e.preventDefault(); store.duplicateSelected(); return;
   }
+  if (meta && e.key.toLowerCase() === 'g') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      const n = store.ungroupSelected();
+      if (n) toast('已解散，拆出 ' + n + ' 个元素');
+    } else {
+      const g = store.groupSelected();
+      toast(g ? '已组合 ' + g.children.length + ' 个元素' : '至少选两个元素才能组合');
+    }
+    return;
+  }
   if (meta && e.key.toLowerCase() === 'c') {
     if (store.state.selection.length) {
       e.preventDefault();

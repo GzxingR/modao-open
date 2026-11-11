@@ -87,7 +87,8 @@ export function createCanvas(ctx) {
   function hitTest(target) {
     let el = target;
     while (el && el !== nodesLayer) {
-      if (el.dataset && el.dataset.id) return el.dataset.id;
+      // 只认页面顶层节点；组内子元素向上冒泡到组
+      if (el.dataset && el.dataset.id && store.nodeById(el.dataset.id)) return el.dataset.id;
       el = el.parentElement;
     }
     return null;
@@ -176,9 +177,12 @@ export function createCanvas(ctx) {
     const zoom = store.state.zoom;
     const items = store.selectedNodes.map((n) => ({ id: n.id, x: n.x, y: n.y }));
     dragging = { startX: e.clientX, startY: e.clientY, items, moved: false, pushed: false, zoom };
-    e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId);
+    // 先挂监听再 try capture：合成事件下 setPointerCapture 可能抛错，不能让它挡住拖动
     window.addEventListener('pointermove', onDragMove);
     window.addEventListener('pointerup', onDragUp, { once: true });
+    try {
+      if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) { /* 合成 pointerId 不支持捕获，忽略 */ }
   }
 
   function onDragMove(e) {

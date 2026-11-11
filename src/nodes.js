@@ -289,6 +289,16 @@ export function createNodeEl(node, opts = {}) {
       }
       break;
     }
+    case 'group': {
+      el.style.background = 'transparent';
+      el.style.border = 'none';
+      el.style.overflow = 'visible';
+      for (const child of node.children || []) {
+        if (child.hidden) continue;
+        el.appendChild(createNodeEl(child, opts));
+      }
+      break;
+    }
     default: {
       if (node.text) {
         flexCenter(el);

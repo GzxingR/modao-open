@@ -1195,6 +1195,109 @@ class Store {
     }, { reason: 'state' });
   }
 
+  /* ---------- 组合 / 解组 ---------- */
+  makeGroupNode(x, y, w, h) {
+    return {
+      id: uid('g'),
+      type: 'group',
+      name: '分组',
+      x, y, w, h,
+      rotation: 0,
+      opacity: 1,
+      bg: 'transparent',
+      radius: 0,
+      borderWidth: 0,
+      borderColor: '#e5e5e5',
+      shadow: 'none',
+      text: '',
+      fontSize: 16,
+      fontWeight: 400,
+      color: '#222222',
+      align: 'left',
+      verticalAlign: 'center',
+      lineHeight: 1.4,
+      paddingX: 0,
+      src: '',
+      locked: false,
+      hidden: false,
+      states: null,
+      activeStateId: null,
+      link: null,
+      children: []
+    };
+  }
+
+  /** 把当前选中的多个元素打成一个组 */
+  groupSelected() {
+    const nodes = this.selectedNodes;
+    if (nodes.length < 2) return null;
+
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+    for (const n of nodes) {
+      x1 = Math.min(x1, n.x);
+      y1 = Math.min(y1, n.y);
+      x2 = Math.max(x2, n.x + n.w);
+      y2 = Math.max(y2, n.y + n.h);
+    }
+
+    const group = this.makeGroupNode(Math.round(x1), Math.round(y1), Math.round(x2 - x1), Math.round(y2 - y1));
+    const ids = new Set(nodes.map((n) => n.id));
+
+    this.mutate(() => {
+      const page = this.page;
+      const kept = [];
+      for (const n of page.nodes) {
+        if (ids.has(n.id)) {
+          n.x = n.x - group.x;
+          n.y = n.y - group.y;
+          group.children.push(n);
+        } else {
+          kept.push(n);
+        }
+      }
+      kept.push(group);
+      page.nodes = kept;
+    }, { reason: 'group' });
+
+    this.select([group.id]);
+    return group;
+  }
+
+  /** 解散选中的组，子元素回到页面坐标 */
+  ungroupSelected() {
+    const groups = this.selectedNodes.filter((n) => n.type === 'group' && Array.isArray(n.children) && n.children.length);
+    if (!groups.length) return 0;
+    let count = 0;
+
+    this.mutate(() => {
+      const page = this.page;
+      const next = [];
+      for (const n of page.nodes) {
+        if (groups.indexOf(n) >= 0) {
+          for (const c of n.children) {
+            c.x = c.x + n.x;
+            c.y = c.y + n.y;
+            next.push(c);
+            count += 1;
+          }
+        } else {
+          next.push(n);
+        }
+      }
+      page.nodes = next;
+    }, { reason: 'ungroup' });
+
+    this.select([]);
+    return count;
+  }
+
+  isGrouped(node) {
+    return !!(node && node.type === 'group' && Array.isArray(node.children));
+  }
+
   /* ---------- 剪贴板 ---------- */
   copySelected() {
     const nodes = this.selectedNodes;
@@ -1719,6 +1822,16 @@ function createNodeEl(node, opts = {}) {
       }
       break;
     }
+    case 'group': {
+      el.style.background = 'transparent';
+      el.style.border = 'none';
+      el.style.overflow = 'visible';
+      for (const child of node.children || []) {
+        if (child.hidden) continue;
+        el.appendChild(createNodeEl(child, opts));
+      }
+      break;
+    }
     default: {
       if (node.text) {
         flexCenter(el);
@@ -1839,7 +1952,8 @@ function createCanvas(ctx) {
   function hitTest(target) {
     let el = target;
     while (el && el !== nodesLayer) {
-      if (el.dataset && el.dataset.id) return el.dataset.id;
+      // 只认页面顶层节点；组内子元素向上冒泡到组
+      if (el.dataset && el.dataset.id && store.nodeById(el.dataset.id)) return el.dataset.id;
       el = el.parentElement;
     }
     return null;
@@ -1928,9 +2042,12 @@ function createCanvas(ctx) {
     const zoom = store.state.zoom;
     const items = store.selectedNodes.map((n) => ({ id: n.id, x: n.x, y: n.y }));
     dragging = { startX: e.clientX, startY: e.clientY, items, moved: false, pushed: false, zoom };
-    e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId);
+    // 先挂监听再 try capture：合成事件下 setPointerCapture 可能抛错，不能让它挡住拖动
     window.addEventListener('pointermove', onDragMove);
     window.addEventListener('pointerup', onDragUp, { once: true });
+    try {
+      if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) { /* 合成 pointerId 不支持捕获，忽略 */ }
   }
 
   function onDragMove(e) {
@@ -2153,7 +2270,8 @@ const LAYER_META = {
   card: { icon: '▤', label: '卡片' },
   listitem: { icon: '☰', label: '列表项' },
   navbar: { icon: '▔', label: '导航栏' },
-  tabbar: { icon: '▁', label: '标签栏' }
+  tabbar: { icon: '▁', label: '标签栏' },
+  group: { icon: '❐', label: '分组' }
 };
 
 /** 图层列表：当前页所有元素，最上层显示在最前 */
@@ -2186,7 +2304,11 @@ function renderLayerList(container, store, handlers) {
     const name = document.createElement('span');
     name.className = 'l-name';
     const text = (node.text || '').replace(/\s+/g, ' ').trim();
-    name.textContent = (text ? text.slice(0, 14) : meta.label);
+    if (node.type === 'group') {
+      name.textContent = '分组（' + ((node.children && node.children.length) || 0) + '）';
+    } else {
+      name.textContent = (text ? text.slice(0, 14) : meta.label);
+    }
     name.title = meta.label + (text ? '：' + text : '');
     row.appendChild(name);
 
@@ -2810,7 +2932,24 @@ function renderInspector(container, store, handlers) {
   container.appendChild(group('组件状态（动态组件）', stateRows));
 
   /* ---------- 排列 ---------- */
+  const selIsGroup = node.type === 'group';
   container.appendChild(group('排列', [
+    el('div', { class: 'row' }, [
+      el('button', {
+        class: 'tb',
+        text: selIsGroup ? '解散分组' : '组合选中',
+        style: { flex: '1' },
+        onclick: () => {
+          if (selIsGroup) {
+            const n = store.ungroupSelected();
+            handlers.toast('已解散，拆出 ' + n + ' 个元素');
+          } else {
+            const g = store.groupSelected();
+            handlers.toast(g ? '已组合 ' + (g.children ? g.children.length : 0) + ' 个元素' : '至少选两个元素才能组合');
+          }
+        }
+      })
+    ]),
     el('div', { class: 'row' }, [
       el('button', { class: 'tb', text: '上移一层', style: { flex: '1' }, onclick: () => handlers.bringForward(node.id) }),
       el('button', { class: 'tb', text: '下移一层', style: { flex: '1' }, onclick: () => handlers.sendBackward(node.id) })
@@ -4067,6 +4206,17 @@ window.addEventListener('keydown', (e) => {
   }
   if (meta && e.key.toLowerCase() === 'd') {
     e.preventDefault(); store.duplicateSelected(); return;
+  }
+  if (meta && e.key.toLowerCase() === 'g') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      const n = store.ungroupSelected();
+      if (n) toast('已解散，拆出 ' + n + ' 个元素');
+    } else {
+      const g = store.groupSelected();
+      toast(g ? '已组合 ' + g.children.length + ' 个元素' : '至少选两个元素才能组合');
+    }
+    return;
   }
   if (meta && e.key.toLowerCase() === 'c') {
     if (store.state.selection.length) {

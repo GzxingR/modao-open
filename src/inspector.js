@@ -516,7 +516,24 @@ export function renderInspector(container, store, handlers) {
   container.appendChild(group('组件状态（动态组件）', stateRows));
 
   /* ---------- 排列 ---------- */
+  const selIsGroup = node.type === 'group';
   container.appendChild(group('排列', [
+    el('div', { class: 'row' }, [
+      el('button', {
+        class: 'tb',
+        text: selIsGroup ? '解散分组' : '组合选中',
+        style: { flex: '1' },
+        onclick: () => {
+          if (selIsGroup) {
+            const n = store.ungroupSelected();
+            handlers.toast('已解散，拆出 ' + n + ' 个元素');
+          } else {
+            const g = store.groupSelected();
+            handlers.toast(g ? '已组合 ' + (g.children ? g.children.length : 0) + ' 个元素' : '至少选两个元素才能组合');
+          }
+        }
+      })
+    ]),
     el('div', { class: 'row' }, [
       el('button', { class: 'tb', text: '上移一层', style: { flex: '1' }, onclick: () => handlers.bringForward(node.id) }),
       el('button', { class: 'tb', text: '下移一层', style: { flex: '1' }, onclick: () => handlers.sendBackward(node.id) })
