@@ -1,6 +1,6 @@
 /**
  * 导出离线演示 HTML：单文件、含全部页面与交互，双击就能演示，也可以发给别人。
- * 做法：每页用真实渲染器生成静态 DOM（样式已内联），再把跳转/显隐/状态切换的元数据
+ * 做法：每页用真实渲染器生成静态 DOM（样式已内联），再把触发方式/行为的元数据
  * 写进 data-* 属性，附一段极小运行时。
  */
 
@@ -22,9 +22,11 @@ function nodeHtml(node, overrideStateId) {
   const link = node.link;
   if (link && link.action && link.action !== 'none') {
     el.dataset.la = link.action;
+    el.dataset.t = link.trigger || 'click';
     if (link.targetPageId) el.dataset.lp = link.targetPageId;
     if (link.targetNodeId) el.dataset.ln = link.targetNodeId;
     if (link.targetStateId) el.dataset.ls = link.targetStateId;
+    if (link.url) el.dataset.lu = link.url;
     el.style.cursor = 'pointer';
   }
   return el.outerHTML;
@@ -59,7 +61,9 @@ const RUNTIME = `
   var stage = document.getElementById('stage');
   var cur = D.startPageId;
   var pages = {};
-  D.pages.forEach(function (p) {
+  var LP = 500, SW = 30;
+
+  function boot(p) {
     var box = document.createElement('div');
     box.className = 'pg';
     box.dataset.pg = p.id;
@@ -68,47 +72,73 @@ const RUNTIME = `
     box.style.background = p.bg;
     box.style.position = 'relative';
     box.style.overflow = 'hidden';
-    pages[p.id] = p;
+    pages[p.id] = { data: p, box: box };
+
     p.nodes.forEach(function (n) {
       var holder = document.createElement('div');
       holder.innerHTML = n.html;
       var el = holder.firstElementChild;
-      if (el) box.appendChild(el);
+      if (!el) return;
+      box.appendChild(el);
+      bind(el, box, p);
     });
+
     stage.appendChild(box);
-  });
-
-  function show(id) {
-    cur = id;
-    Array.prototype.forEach.call(stage.children, function (box) {
-      box.style.display = box.dataset.pg === id ? 'block' : 'none';
-    });
-    fit();
   }
 
-  function fit() {
-    var p = pages[cur];
-    if (!p) return;
-    var pad = 48;
-    var s = Math.min(1, (window.innerWidth - pad) / p.w, (window.innerHeight - pad) / p.h);
-    stage.style.transform = 'scale(' + s + ')';
+  function bind(el, box, p) {
+    var act = el.dataset.la;
+    if (!act) return;
+    var t = el.dataset.t || 'click';
+    el.style.cursor = 'pointer';
+    function fire() { run(el, box, p); }
+
+    if (t === 'click') {
+      el.addEventListener('click', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'dblclick') {
+      el.addEventListener('dblclick', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'mouseenter') {
+      el.addEventListener('mouseenter', fire);
+    } else if (t === 'mouseleave') {
+      el.addEventListener('mouseleave', fire);
+    } else if (t === 'longpress') {
+      var timer = null;
+      var clear = function () { if (timer) { clearTimeout(timer); timer = null; } };
+      el.addEventListener('pointerdown', function (e) {
+        e.stopPropagation(); clear();
+        timer = setTimeout(function () { timer = null; fire(); }, LP);
+      });
+      el.addEventListener('pointerup', clear);
+      el.addEventListener('pointerleave', clear);
+    } else if (t.indexOf('swipe') === 0) {
+      var sx = 0, sy = 0, tracking = false;
+      el.addEventListener('pointerdown', function (e) {
+        e.stopPropagation(); sx = e.clientX; sy = e.clientY; tracking = true;
+      });
+      el.addEventListener('pointerup', function (e) {
+        if (!tracking) return;
+        tracking = false;
+        var dx = e.clientX - sx, dy = e.clientY - sy;
+        var horiz = Math.abs(dx) > Math.abs(dy);
+        var dist = horiz ? Math.abs(dx) : Math.abs(dy);
+        if (dist < SW) return;
+        var dir = horiz ? (dx > 0 ? 'Right' : 'Left') : (dy > 0 ? 'Down' : 'Up');
+        if ('swipe' + dir === t) fire();
+      });
+    }
   }
 
-  window.addEventListener('resize', fit);
-
-  stage.addEventListener('click', function (e) {
-    var el = e.target;
-    while (el && el !== stage && !(el.dataset && el.dataset.la)) el = el.parentElement;
-    if (!el || !el.dataset || !el.dataset.la) return;
+  function run(el, box, p) {
     var act = el.dataset.la;
     if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
-    var lp = el.closest ? el.closest('.pg') : null;
-    if (!lp) return;
+    if (act === 'url' && el.dataset.lu) { window.open(el.dataset.lu, '_blank', 'noopener'); return; }
+
+    var nodeId = el.dataset.ln;
+    if (!nodeId) return;
+    var target = box.querySelector('[data-id="' + nodeId + '"]');
+    if (!target) return;
+
     if (act === 'state') {
-      var nodeId = el.dataset.ln;
-      var target = lp.querySelector('[data-id="' + nodeId + '"]');
-      if (!target) return;
-      var p = pages[lp.dataset.pg];
       var nd = null;
       for (var i = 0; i < p.nodes.length; i++) if (p.nodes[i].id === nodeId) nd = p.nodes[i];
       if (!nd || !nd.states) return;
@@ -125,16 +155,43 @@ const RUNTIME = `
       if (!fresh) return;
       fresh.dataset.state = nextId;
       target.replaceWith(fresh);
+      bind(fresh, box, p);
       return;
     }
-    var nodeId2 = el.dataset.ln;
-    var t2 = lp.querySelector('[data-id="' + nodeId2 + '"]');
-    if (!t2) return;
-    if (act === 'show') t2.style.display = '';
-    else if (act === 'hide') t2.style.display = 'none';
-    else if (act === 'toggle') t2.style.display = (t2.style.display === 'none' ? '' : 'none');
-  });
 
+    if (act === 'show') target.style.display = '';
+    else if (act === 'hide') target.style.display = 'none';
+    else if (act === 'toggle') target.style.display = (target.style.display === 'none' ? '' : 'none');
+    else if (act === 'scrollTo' && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function show(id) {
+    cur = id;
+    Object.keys(pages).forEach(function (k) {
+      pages[k].box.style.display = (k === id ? 'block' : 'none');
+    });
+    fit();
+    var p = pages[id];
+    if (!p) return;
+    var loads = p.box.querySelectorAll('[data-t="load"]');
+    if (loads.length) {
+      setTimeout(function () {
+        Array.prototype.forEach.call(loads, function (el) { run(el, p.box, p.data); });
+      }, 60);
+    }
+  }
+
+  function fit() {
+    var p = pages[cur];
+    if (!p) return;
+    var pad = 48;
+    var s = Math.min(1, (window.innerWidth - pad) / p.data.w, (window.innerHeight - pad) / p.data.h);
+    stage.style.transform = 'scale(' + s + ')';
+  }
+
+  window.addEventListener('resize', fit);
+
+  D.pages.forEach(boot);
   show(D.startPageId);
 })();
 `;
@@ -147,7 +204,6 @@ export function buildStandaloneHtml(project) {
     pages
   };
 
-  const first = pages[0] || { w: 402, h: 874 };
   const title = project.name || '原型演示';
 
   return [

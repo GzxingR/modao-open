@@ -2,7 +2,7 @@
  * 右侧属性面板
  */
 
-import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice } from './model.js';
+import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice, TRIGGERS, ACTIONS } from './model.js';
 import { compressImageFile } from './io.js';
 
 function el(tag, props = {}, children = []) {
@@ -331,23 +331,38 @@ export function renderInspector(container, store, handlers) {
   /* ---------- 交互 ---------- */
   const pages = store.project.pages.filter((p) => p.id !== store.page.id);
   const linkRows = [];
+  const currentAction = node.link ? node.link.action : 'none';
+  const currentTrigger = (node.link && node.link.trigger) || 'click';
+
+  const triggerSelect = el('select');
+  for (const t of TRIGGERS) {
+    const o = el('option', { value: t.value, text: t.label });
+    if (t.value === currentTrigger) o.selected = true;
+    triggerSelect.appendChild(o);
+  }
+  triggerSelect.disabled = currentAction === 'none';
+  triggerSelect.addEventListener('change', () => {
+    const patch = Object.assign({}, node.link || { action: 'navigate' }, { trigger: triggerSelect.value });
+    handlers.update(node.id, { link: patch });
+  });
+
   const actionSelect = el('select');
-  const actions = [
-    { value: 'none', label: '无交互' },
-    { value: 'navigate', label: '点击跳转页面' },
-    { value: 'state', label: '点击切换组件状态' },
-    { value: 'show', label: '点击显示目标' },
-    { value: 'hide', label: '点击隐藏目标' },
-    { value: 'toggle', label: '点击切换目标' }
-  ];
-  for (const a of actions) {
+  for (const a of ACTIONS) {
     const o = el('option', { value: a.value, text: a.label });
-    if ((node.link && node.link.action) === a.value || (!node.link && a.value === 'none')) o.selected = true;
+    if (a.value === currentAction) o.selected = true;
     actionSelect.appendChild(o);
   }
-  linkRows.push(el('div', { class: 'row' }, [actionSelect]));
 
-  const currentAction = node.link ? node.link.action : 'none';
+  linkRows.push(el('div', { class: 'row' }, [
+    el('span', { class: 'group-title', text: '触发', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
+    triggerSelect
+  ]));
+  linkRows.push(el('div', { class: 'row' }, [
+    el('span', { class: 'group-title', text: '行为', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
+    actionSelect
+  ]));
+
+  const keep = () => Object.assign({ trigger: currentTrigger }, node.link || {});
 
   if (currentAction === 'navigate') {
     if (!pages.length) {
@@ -359,9 +374,19 @@ export function renderInspector(container, store, handlers) {
         if (node.link && node.link.targetPageId === p.id) o.selected = true;
         pageSelect.appendChild(o);
       }
-      pageSelect.addEventListener('change', () => handlers.update(node.id, { link: { action: 'navigate', targetPageId: pageSelect.value } }));
+      pageSelect.addEventListener('change', () => {
+        handlers.update(node.id, { link: Object.assign(keep(), { action: 'navigate', targetPageId: pageSelect.value }) });
+      });
       linkRows.push(el('div', { class: 'row' }, [pageSelect]));
     }
+  } else if (currentAction === 'url') {
+    const urlInput = el('input', { type: 'text', value: (node.link && node.link.url) || 'https://' });
+    urlInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+    urlInput.addEventListener('change', () => {
+      handlers.update(node.id, { link: Object.assign(keep(), { action: 'url', url: urlInput.value.trim() }) });
+    });
+    linkRows.push(el('div', { class: 'row' }, [urlInput]));
+    linkRows.push(el('div', { class: 'empty-hint', text: '预览时点开会在新标签打开这个地址。' }));
   } else if (currentAction === 'state') {
     const targets = store.page.nodes.filter((n) => n.id !== node.id && n.states && n.states.length);
     if (!targets.length) {
@@ -388,19 +413,20 @@ export function renderInspector(container, store, handlers) {
       }
       linkRows.push(el('div', { class: 'row' }, [stateSelect]));
 
-      const apply = (patch) => handlers.update(node.id, { link: patch });
       nodeSelect.addEventListener('change', () => {
-        apply({ action: 'state', targetNodeId: nodeSelect.value, targetStateId: null });
+        handlers.update(node.id, {
+          link: Object.assign(keep(), { action: 'state', targetNodeId: nodeSelect.value, targetStateId: null })
+        });
       });
       stateSelect.addEventListener('change', () => {
-        apply({
-          action: 'state',
-          targetNodeId: currentTargetId,
-          targetStateId: stateSelect.value || null
+        handlers.update(node.id, {
+          link: Object.assign(keep(), {
+            action: 'state', targetNodeId: currentTargetId, targetStateId: stateSelect.value || null
+          })
         });
       });
     }
-  } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle') {
+  } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle' || currentAction === 'scrollTo') {
     const nodeSelect = el('select');
     const candidates = store.page.nodes.filter((n) => n.id !== node.id);
     if (!candidates.length) {
@@ -411,19 +437,24 @@ export function renderInspector(container, store, handlers) {
         if (node.link && node.link.targetNodeId === n.id) o.selected = true;
         nodeSelect.appendChild(o);
       }
-      nodeSelect.addEventListener('change', () => handlers.update(node.id, { link: { action: currentAction, targetNodeId: nodeSelect.value } }));
+      nodeSelect.addEventListener('change', () => {
+        handlers.update(node.id, { link: Object.assign(keep(), { action: currentAction, targetNodeId: nodeSelect.value }) });
+      });
       linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
     }
   }
 
   actionSelect.addEventListener('change', () => {
     const v = actionSelect.value;
-    if (v === 'none') handlers.update(node.id, { link: null });
-    else if (v === 'navigate') handlers.update(node.id, { link: { action: 'navigate', targetPageId: pages[0] ? pages[0].id : null } });
+    if (v === 'none') { handlers.update(node.id, { link: null }); return; }
+    const next = { action: v, trigger: currentTrigger };
+    if (v === 'navigate') next.targetPageId = pages[0] ? pages[0].id : null;
+    else if (v === 'url') next.url = 'https://';
     else {
       const target = store.page.nodes.filter((n) => n.id !== node.id)[0];
-      handlers.update(node.id, { link: { action: v, targetNodeId: target ? target.id : null } });
+      next.targetNodeId = target ? target.id : null;
     }
+    handlers.update(node.id, { link: next });
   });
 
   container.appendChild(group('交互（预览时生效）', linkRows));

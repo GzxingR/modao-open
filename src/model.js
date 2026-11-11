@@ -36,6 +36,42 @@ export function resolveDevice(page) {
   return base;
 }
 
+/** 交互触发方式 */
+export const TRIGGERS = [
+  { value: 'click', label: '单击' },
+  { value: 'dblclick', label: '双击' },
+  { value: 'longpress', label: '长按' },
+  { value: 'mouseenter', label: '鼠标移入' },
+  { value: 'mouseleave', label: '鼠标移出' },
+  { value: 'swipeLeft', label: '左滑' },
+  { value: 'swipeRight', label: '右滑' },
+  { value: 'swipeUp', label: '上滑' },
+  { value: 'swipeDown', label: '下滑' },
+  { value: 'load', label: '载入时' }
+];
+
+/** 交互行为 */
+export const ACTIONS = [
+  { value: 'none', label: '无交互' },
+  { value: 'navigate', label: '跳转页面' },
+  { value: 'state', label: '切换组件状态' },
+  { value: 'show', label: '显示目标' },
+  { value: 'hide', label: '隐藏目标' },
+  { value: 'toggle', label: '切换目标显隐' },
+  { value: 'scrollTo', label: '滚动到目标' },
+  { value: 'url', label: '打开链接' }
+];
+
+export function triggerLabel(v) {
+  for (const t of TRIGGERS) if (t.value === v) return t.label;
+  return '单击';
+}
+
+export function actionLabel(v) {
+  for (const a of ACTIONS) if (a.value === v) return a.label;
+  return v || '';
+}
+
 let counter = 0;
 export function uid(prefix = 'n') {
   counter += 1;
@@ -224,7 +260,7 @@ function baseNode(type, device) {
     // 组件状态（墨刀式动态组件的轻量实现：外观变体）
     states: null,        // [{ id, name, style: { bg, text, color, ... } }]
     activeStateId: null,
-    // 交互（墨刀式）：点击后做什么
+    // 交互（墨刀式）：触发方式 + 行为
     link: null
   };
 }

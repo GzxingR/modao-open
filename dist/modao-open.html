@@ -627,6 +627,42 @@ function resolveDevice(page) {
   return base;
 }
 
+/** 交互触发方式 */
+const TRIGGERS = [
+  { value: 'click', label: '单击' },
+  { value: 'dblclick', label: '双击' },
+  { value: 'longpress', label: '长按' },
+  { value: 'mouseenter', label: '鼠标移入' },
+  { value: 'mouseleave', label: '鼠标移出' },
+  { value: 'swipeLeft', label: '左滑' },
+  { value: 'swipeRight', label: '右滑' },
+  { value: 'swipeUp', label: '上滑' },
+  { value: 'swipeDown', label: '下滑' },
+  { value: 'load', label: '载入时' }
+];
+
+/** 交互行为 */
+const ACTIONS = [
+  { value: 'none', label: '无交互' },
+  { value: 'navigate', label: '跳转页面' },
+  { value: 'state', label: '切换组件状态' },
+  { value: 'show', label: '显示目标' },
+  { value: 'hide', label: '隐藏目标' },
+  { value: 'toggle', label: '切换目标显隐' },
+  { value: 'scrollTo', label: '滚动到目标' },
+  { value: 'url', label: '打开链接' }
+];
+
+function triggerLabel(v) {
+  for (const t of TRIGGERS) if (t.value === v) return t.label;
+  return '单击';
+}
+
+function actionLabel(v) {
+  for (const a of ACTIONS) if (a.value === v) return a.label;
+  return v || '';
+}
+
 let counter = 0;
 function uid(prefix = 'n') {
   counter += 1;
@@ -815,7 +851,7 @@ function baseNode(type, device) {
     // 组件状态（墨刀式动态组件的轻量实现：外观变体）
     states: null,        // [{ id, name, style: { bg, text, color, ... } }]
     activeStateId: null,
-    // 交互（墨刀式）：点击后做什么
+    // 交互（墨刀式）：触发方式 + 行为
     link: null
   };
 }
@@ -2589,23 +2625,38 @@ function renderInspector(container, store, handlers) {
   /* ---------- 交互 ---------- */
   const pages = store.project.pages.filter((p) => p.id !== store.page.id);
   const linkRows = [];
+  const currentAction = node.link ? node.link.action : 'none';
+  const currentTrigger = (node.link && node.link.trigger) || 'click';
+
+  const triggerSelect = el('select');
+  for (const t of TRIGGERS) {
+    const o = el('option', { value: t.value, text: t.label });
+    if (t.value === currentTrigger) o.selected = true;
+    triggerSelect.appendChild(o);
+  }
+  triggerSelect.disabled = currentAction === 'none';
+  triggerSelect.addEventListener('change', () => {
+    const patch = Object.assign({}, node.link || { action: 'navigate' }, { trigger: triggerSelect.value });
+    handlers.update(node.id, { link: patch });
+  });
+
   const actionSelect = el('select');
-  const actions = [
-    { value: 'none', label: '无交互' },
-    { value: 'navigate', label: '点击跳转页面' },
-    { value: 'state', label: '点击切换组件状态' },
-    { value: 'show', label: '点击显示目标' },
-    { value: 'hide', label: '点击隐藏目标' },
-    { value: 'toggle', label: '点击切换目标' }
-  ];
-  for (const a of actions) {
+  for (const a of ACTIONS) {
     const o = el('option', { value: a.value, text: a.label });
-    if ((node.link && node.link.action) === a.value || (!node.link && a.value === 'none')) o.selected = true;
+    if (a.value === currentAction) o.selected = true;
     actionSelect.appendChild(o);
   }
-  linkRows.push(el('div', { class: 'row' }, [actionSelect]));
 
-  const currentAction = node.link ? node.link.action : 'none';
+  linkRows.push(el('div', { class: 'row' }, [
+    el('span', { class: 'group-title', text: '触发', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
+    triggerSelect
+  ]));
+  linkRows.push(el('div', { class: 'row' }, [
+    el('span', { class: 'group-title', text: '行为', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
+    actionSelect
+  ]));
+
+  const keep = () => Object.assign({ trigger: currentTrigger }, node.link || {});
 
   if (currentAction === 'navigate') {
     if (!pages.length) {
@@ -2617,9 +2668,19 @@ function renderInspector(container, store, handlers) {
         if (node.link && node.link.targetPageId === p.id) o.selected = true;
         pageSelect.appendChild(o);
       }
-      pageSelect.addEventListener('change', () => handlers.update(node.id, { link: { action: 'navigate', targetPageId: pageSelect.value } }));
+      pageSelect.addEventListener('change', () => {
+        handlers.update(node.id, { link: Object.assign(keep(), { action: 'navigate', targetPageId: pageSelect.value }) });
+      });
       linkRows.push(el('div', { class: 'row' }, [pageSelect]));
     }
+  } else if (currentAction === 'url') {
+    const urlInput = el('input', { type: 'text', value: (node.link && node.link.url) || 'https://' });
+    urlInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+    urlInput.addEventListener('change', () => {
+      handlers.update(node.id, { link: Object.assign(keep(), { action: 'url', url: urlInput.value.trim() }) });
+    });
+    linkRows.push(el('div', { class: 'row' }, [urlInput]));
+    linkRows.push(el('div', { class: 'empty-hint', text: '预览时点开会在新标签打开这个地址。' }));
   } else if (currentAction === 'state') {
     const targets = store.page.nodes.filter((n) => n.id !== node.id && n.states && n.states.length);
     if (!targets.length) {
@@ -2646,19 +2707,20 @@ function renderInspector(container, store, handlers) {
       }
       linkRows.push(el('div', { class: 'row' }, [stateSelect]));
 
-      const apply = (patch) => handlers.update(node.id, { link: patch });
       nodeSelect.addEventListener('change', () => {
-        apply({ action: 'state', targetNodeId: nodeSelect.value, targetStateId: null });
+        handlers.update(node.id, {
+          link: Object.assign(keep(), { action: 'state', targetNodeId: nodeSelect.value, targetStateId: null })
+        });
       });
       stateSelect.addEventListener('change', () => {
-        apply({
-          action: 'state',
-          targetNodeId: currentTargetId,
-          targetStateId: stateSelect.value || null
+        handlers.update(node.id, {
+          link: Object.assign(keep(), {
+            action: 'state', targetNodeId: currentTargetId, targetStateId: stateSelect.value || null
+          })
         });
       });
     }
-  } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle') {
+  } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle' || currentAction === 'scrollTo') {
     const nodeSelect = el('select');
     const candidates = store.page.nodes.filter((n) => n.id !== node.id);
     if (!candidates.length) {
@@ -2669,19 +2731,24 @@ function renderInspector(container, store, handlers) {
         if (node.link && node.link.targetNodeId === n.id) o.selected = true;
         nodeSelect.appendChild(o);
       }
-      nodeSelect.addEventListener('change', () => handlers.update(node.id, { link: { action: currentAction, targetNodeId: nodeSelect.value } }));
+      nodeSelect.addEventListener('change', () => {
+        handlers.update(node.id, { link: Object.assign(keep(), { action: currentAction, targetNodeId: nodeSelect.value }) });
+      });
       linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
     }
   }
 
   actionSelect.addEventListener('change', () => {
     const v = actionSelect.value;
-    if (v === 'none') handlers.update(node.id, { link: null });
-    else if (v === 'navigate') handlers.update(node.id, { link: { action: 'navigate', targetPageId: pages[0] ? pages[0].id : null } });
+    if (v === 'none') { handlers.update(node.id, { link: null }); return; }
+    const next = { action: v, trigger: currentTrigger };
+    if (v === 'navigate') next.targetPageId = pages[0] ? pages[0].id : null;
+    else if (v === 'url') next.url = 'https://';
     else {
       const target = store.page.nodes.filter((n) => n.id !== node.id)[0];
-      handlers.update(node.id, { link: { action: v, targetNodeId: target ? target.id : null } });
+      next.targetNodeId = target ? target.id : null;
     }
+    handlers.update(node.id, { link: next });
   });
 
   container.appendChild(group('交互（预览时生效）', linkRows));
@@ -2774,7 +2841,60 @@ function isHexish(v) {
 
 
 
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+const LONG_PRESS_MS = 500;
+const SWIPE_MIN = 30;
+
+/** 给预览/导出用的触发器绑定；fire 是真正的行为执行函数 */
+function bindTriggers(el, link, fire) {
+  const trigger = (link && link.trigger) || 'click';
+  el.style.cursor = 'pointer';
+
+  if (trigger === 'click') {
+    el.addEventListener('click', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'dblclick') {
+    el.addEventListener('dblclick', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'mouseenter') {
+    el.addEventListener('mouseenter', () => fire());
+  } else if (trigger === 'mouseleave') {
+    el.addEventListener('mouseleave', () => fire());
+  } else if (trigger === 'longpress') {
+    let timer = null;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      clear();
+      timer = setTimeout(() => { timer = null; fire(); }, LONG_PRESS_MS);
+    });
+    el.addEventListener('pointerup', clear);
+    el.addEventListener('pointerleave', clear);
+    el.addEventListener('pointercancel', clear);
+  } else if (trigger.indexOf('swipe') === 0) {
+    let sx = 0;
+    let sy = 0;
+    let tracking = false;
+    el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      sx = e.clientX;
+      sy = e.clientY;
+      tracking = true;
+    });
+    el.addEventListener('pointerup', (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      const horiz = Math.abs(dx) > Math.abs(dy);
+      const dist = horiz ? Math.abs(dx) : Math.abs(dy);
+      if (dist < SWIPE_MIN) return;
+      const dir = horiz ? (dx > 0 ? 'Right' : 'Left') : (dy > 0 ? 'Down' : 'Up');
+      if ('swipe' + dir === trigger) fire();
+    });
+  }
+  // 'load' 由调用方在渲染后立即触发，不需要绑定
+}
 
 function renderLinks(layer, store) {
   layer.textContent = '';
@@ -2793,6 +2913,7 @@ function renderLinks(layer, store) {
 
   for (const node of page.nodes) {
     if (!node.link || !node.link.action || node.link.action === 'none') continue;
+    const trig = triggerLabel(node.link.trigger || 'click');
     const from = { x: node.x + node.w, y: node.y + node.h / 2 };
 
     let to = null;
@@ -2802,7 +2923,10 @@ function renderLinks(layer, store) {
       const target = store.project.pages.find((p) => p.id === node.link.targetPageId);
       if (!target) continue;
       to = { x: device.w - 10, y: from.y };
-      label = '→ ' + target.name;
+      label = trig + ' → ' + target.name;
+    } else if (node.link.action === 'url') {
+      to = { x: device.w - 10, y: from.y };
+      label = trig + ' → 链接';
     } else if (node.link.action === 'state') {
       const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
       if (!target) continue;
@@ -2812,12 +2936,12 @@ function renderLinks(layer, store) {
         const st = target.states.find((s) => s.id === node.link.targetStateId);
         if (st) stName = st.name;
       }
-      label = '切状态 → ' + stName;
+      label = trig + ' → ' + stName;
     } else {
       const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
       if (!target) continue;
       to = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
-      label = node.link.action === 'show' ? '显示' : (node.link.action === 'hide' ? '隐藏' : '切换');
+      label = trig + ' → ' + actionLabel(node.link.action);
     }
 
     const path = document.createElementNS(SVG_NS, 'path');
@@ -2836,7 +2960,7 @@ function renderLinks(layer, store) {
     svg.appendChild(circle);
 
     const text = document.createElementNS(SVG_NS, 'text');
-    text.setAttribute('x', String(node.link.action === 'navigate' ? Math.max(8, to.x - 96) : to.x + 6));
+    text.setAttribute('x', String(node.link.action === 'navigate' || node.link.action === 'url' ? Math.max(8, to.x - 110) : to.x + 6));
     text.setAttribute('y', String(to.y - 6));
     text.setAttribute('fill', '#1677ff');
     text.setAttribute('stroke', 'rgba(255,255,255,0.92)');
@@ -2855,7 +2979,7 @@ function renderLinks(layer, store) {
 }
 
 /**
- * 预览运行时：页面跳转、显隐切换、组件状态切换。
+ * 预览运行时：页面跳转、显隐切换、组件状态切换、滚动到、打开链接。
  * project 传进来的应是深拷贝，运行时允许改动其 activeStateId。
  */
 function createPreviewRuntime(project, startPageId, mount) {
@@ -2880,25 +3004,17 @@ function createPreviewRuntime(project, startPageId, mount) {
 
     const nodeEls = new Map();
 
-    function bind(node, el) {
-      el.style.cursor = node.link ? 'pointer' : 'default';
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        runLink(node);
-      });
-    }
-
     function rerenderNode(node) {
       const old = nodeEls.get(node.id);
       if (!old) return;
       const fresh = createNodeEl(node, { interactive: true });
       if (hiddenState.get(node.id) === true) fresh.style.display = 'none';
-      bind(node, fresh);
+      attach(node, fresh);
       old.replaceWith(fresh);
       nodeEls.set(node.id, fresh);
     }
 
-    function runLink(node) {
+    function runAction(node) {
       const link = node.link;
       if (!link || !link.action || link.action === 'none') return;
 
@@ -2908,6 +3024,11 @@ function createPreviewRuntime(project, startPageId, mount) {
           hiddenState.clear();
           render();
         }
+        return;
+      }
+
+      if (link.action === 'url') {
+        if (link.url) window.open(link.url, '_blank', 'noopener');
         return;
       }
 
@@ -2940,6 +3061,17 @@ function createPreviewRuntime(project, startPageId, mount) {
         const isHidden = el.style.display === 'none';
         el.style.display = isHidden ? '' : 'none';
         hiddenState.set(target.id, !isHidden);
+      } else if (link.action === 'scrollTo') {
+        if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+
+    function attach(node, el) {
+      const link = node.link;
+      if (link && link.action && link.action !== 'none' && (link.trigger || 'click') !== 'load') {
+        bindTriggers(el, link, () => runAction(node));
+      } else {
+        el.style.cursor = 'default';
       }
     }
 
@@ -2947,12 +3079,20 @@ function createPreviewRuntime(project, startPageId, mount) {
       if (node.hidden) continue;
       const el = createNodeEl(node, { interactive: true });
       if (hiddenState.get(node.id) === true) el.style.display = 'none';
-      bind(node, el);
+      attach(node, el);
       host.appendChild(el);
       nodeEls.set(node.id, el);
     }
 
     mount.appendChild(host);
+
+    // 载入时触发（延后一帧，避免与渲染打架）
+    const loads = page.nodes.filter((n) => n.link && n.link.action && n.link.action !== 'none' && (n.link.trigger || 'click') === 'load');
+    if (loads.length) {
+      setTimeout(() => {
+        for (const n of loads) runAction(n);
+      }, 60);
+    }
   }
 
   return {
@@ -3160,7 +3300,7 @@ function typeLabel(type) {
 /* ===== src/exportHtml.js ===== */
 /**
  * 导出离线演示 HTML：单文件、含全部页面与交互，双击就能演示，也可以发给别人。
- * 做法：每页用真实渲染器生成静态 DOM（样式已内联），再把跳转/显隐/状态切换的元数据
+ * 做法：每页用真实渲染器生成静态 DOM（样式已内联），再把触发方式/行为的元数据
  * 写进 data-* 属性，附一段极小运行时。
  */
 
@@ -3182,9 +3322,11 @@ function nodeHtml(node, overrideStateId) {
   const link = node.link;
   if (link && link.action && link.action !== 'none') {
     el.dataset.la = link.action;
+    el.dataset.t = link.trigger || 'click';
     if (link.targetPageId) el.dataset.lp = link.targetPageId;
     if (link.targetNodeId) el.dataset.ln = link.targetNodeId;
     if (link.targetStateId) el.dataset.ls = link.targetStateId;
+    if (link.url) el.dataset.lu = link.url;
     el.style.cursor = 'pointer';
   }
   return el.outerHTML;
@@ -3219,7 +3361,9 @@ const RUNTIME = `
   var stage = document.getElementById('stage');
   var cur = D.startPageId;
   var pages = {};
-  D.pages.forEach(function (p) {
+  var LP = 500, SW = 30;
+
+  function boot(p) {
     var box = document.createElement('div');
     box.className = 'pg';
     box.dataset.pg = p.id;
@@ -3228,47 +3372,73 @@ const RUNTIME = `
     box.style.background = p.bg;
     box.style.position = 'relative';
     box.style.overflow = 'hidden';
-    pages[p.id] = p;
+    pages[p.id] = { data: p, box: box };
+
     p.nodes.forEach(function (n) {
       var holder = document.createElement('div');
       holder.innerHTML = n.html;
       var el = holder.firstElementChild;
-      if (el) box.appendChild(el);
+      if (!el) return;
+      box.appendChild(el);
+      bind(el, box, p);
     });
+
     stage.appendChild(box);
-  });
-
-  function show(id) {
-    cur = id;
-    Array.prototype.forEach.call(stage.children, function (box) {
-      box.style.display = box.dataset.pg === id ? 'block' : 'none';
-    });
-    fit();
   }
 
-  function fit() {
-    var p = pages[cur];
-    if (!p) return;
-    var pad = 48;
-    var s = Math.min(1, (window.innerWidth - pad) / p.w, (window.innerHeight - pad) / p.h);
-    stage.style.transform = 'scale(' + s + ')';
+  function bind(el, box, p) {
+    var act = el.dataset.la;
+    if (!act) return;
+    var t = el.dataset.t || 'click';
+    el.style.cursor = 'pointer';
+    function fire() { run(el, box, p); }
+
+    if (t === 'click') {
+      el.addEventListener('click', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'dblclick') {
+      el.addEventListener('dblclick', function (e) { e.stopPropagation(); fire(); });
+    } else if (t === 'mouseenter') {
+      el.addEventListener('mouseenter', fire);
+    } else if (t === 'mouseleave') {
+      el.addEventListener('mouseleave', fire);
+    } else if (t === 'longpress') {
+      var timer = null;
+      var clear = function () { if (timer) { clearTimeout(timer); timer = null; } };
+      el.addEventListener('pointerdown', function (e) {
+        e.stopPropagation(); clear();
+        timer = setTimeout(function () { timer = null; fire(); }, LP);
+      });
+      el.addEventListener('pointerup', clear);
+      el.addEventListener('pointerleave', clear);
+    } else if (t.indexOf('swipe') === 0) {
+      var sx = 0, sy = 0, tracking = false;
+      el.addEventListener('pointerdown', function (e) {
+        e.stopPropagation(); sx = e.clientX; sy = e.clientY; tracking = true;
+      });
+      el.addEventListener('pointerup', function (e) {
+        if (!tracking) return;
+        tracking = false;
+        var dx = e.clientX - sx, dy = e.clientY - sy;
+        var horiz = Math.abs(dx) > Math.abs(dy);
+        var dist = horiz ? Math.abs(dx) : Math.abs(dy);
+        if (dist < SW) return;
+        var dir = horiz ? (dx > 0 ? 'Right' : 'Left') : (dy > 0 ? 'Down' : 'Up');
+        if ('swipe' + dir === t) fire();
+      });
+    }
   }
 
-  window.addEventListener('resize', fit);
-
-  stage.addEventListener('click', function (e) {
-    var el = e.target;
-    while (el && el !== stage && !(el.dataset && el.dataset.la)) el = el.parentElement;
-    if (!el || !el.dataset || !el.dataset.la) return;
+  function run(el, box, p) {
     var act = el.dataset.la;
     if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
-    var lp = el.closest ? el.closest('.pg') : null;
-    if (!lp) return;
+    if (act === 'url' && el.dataset.lu) { window.open(el.dataset.lu, '_blank', 'noopener'); return; }
+
+    var nodeId = el.dataset.ln;
+    if (!nodeId) return;
+    var target = box.querySelector('[data-id="' + nodeId + '"]');
+    if (!target) return;
+
     if (act === 'state') {
-      var nodeId = el.dataset.ln;
-      var target = lp.querySelector('[data-id="' + nodeId + '"]');
-      if (!target) return;
-      var p = pages[lp.dataset.pg];
       var nd = null;
       for (var i = 0; i < p.nodes.length; i++) if (p.nodes[i].id === nodeId) nd = p.nodes[i];
       if (!nd || !nd.states) return;
@@ -3285,16 +3455,43 @@ const RUNTIME = `
       if (!fresh) return;
       fresh.dataset.state = nextId;
       target.replaceWith(fresh);
+      bind(fresh, box, p);
       return;
     }
-    var nodeId2 = el.dataset.ln;
-    var t2 = lp.querySelector('[data-id="' + nodeId2 + '"]');
-    if (!t2) return;
-    if (act === 'show') t2.style.display = '';
-    else if (act === 'hide') t2.style.display = 'none';
-    else if (act === 'toggle') t2.style.display = (t2.style.display === 'none' ? '' : 'none');
-  });
 
+    if (act === 'show') target.style.display = '';
+    else if (act === 'hide') target.style.display = 'none';
+    else if (act === 'toggle') target.style.display = (target.style.display === 'none' ? '' : 'none');
+    else if (act === 'scrollTo' && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function show(id) {
+    cur = id;
+    Object.keys(pages).forEach(function (k) {
+      pages[k].box.style.display = (k === id ? 'block' : 'none');
+    });
+    fit();
+    var p = pages[id];
+    if (!p) return;
+    var loads = p.box.querySelectorAll('[data-t="load"]');
+    if (loads.length) {
+      setTimeout(function () {
+        Array.prototype.forEach.call(loads, function (el) { run(el, p.box, p.data); });
+      }, 60);
+    }
+  }
+
+  function fit() {
+    var p = pages[cur];
+    if (!p) return;
+    var pad = 48;
+    var s = Math.min(1, (window.innerWidth - pad) / p.data.w, (window.innerHeight - pad) / p.data.h);
+    stage.style.transform = 'scale(' + s + ')';
+  }
+
+  window.addEventListener('resize', fit);
+
+  D.pages.forEach(boot);
   show(D.startPageId);
 })();
 `;
@@ -3307,7 +3504,6 @@ function buildStandaloneHtml(project) {
     pages
   };
 
-  const first = pages[0] || { w: 402, h: 874 };
   const title = project.name || '原型演示';
 
   return [

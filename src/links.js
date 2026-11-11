@@ -3,8 +3,61 @@
  */
 
 import { createNodeEl } from './nodes.js';
+import { triggerLabel, actionLabel } from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+const LONG_PRESS_MS = 500;
+const SWIPE_MIN = 30;
+
+/** 给预览/导出用的触发器绑定；fire 是真正的行为执行函数 */
+export function bindTriggers(el, link, fire) {
+  const trigger = (link && link.trigger) || 'click';
+  el.style.cursor = 'pointer';
+
+  if (trigger === 'click') {
+    el.addEventListener('click', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'dblclick') {
+    el.addEventListener('dblclick', (e) => { e.stopPropagation(); fire(); });
+  } else if (trigger === 'mouseenter') {
+    el.addEventListener('mouseenter', () => fire());
+  } else if (trigger === 'mouseleave') {
+    el.addEventListener('mouseleave', () => fire());
+  } else if (trigger === 'longpress') {
+    let timer = null;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      clear();
+      timer = setTimeout(() => { timer = null; fire(); }, LONG_PRESS_MS);
+    });
+    el.addEventListener('pointerup', clear);
+    el.addEventListener('pointerleave', clear);
+    el.addEventListener('pointercancel', clear);
+  } else if (trigger.indexOf('swipe') === 0) {
+    let sx = 0;
+    let sy = 0;
+    let tracking = false;
+    el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      sx = e.clientX;
+      sy = e.clientY;
+      tracking = true;
+    });
+    el.addEventListener('pointerup', (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      const horiz = Math.abs(dx) > Math.abs(dy);
+      const dist = horiz ? Math.abs(dx) : Math.abs(dy);
+      if (dist < SWIPE_MIN) return;
+      const dir = horiz ? (dx > 0 ? 'Right' : 'Left') : (dy > 0 ? 'Down' : 'Up');
+      if ('swipe' + dir === trigger) fire();
+    });
+  }
+  // 'load' 由调用方在渲染后立即触发，不需要绑定
+}
 
 export function renderLinks(layer, store) {
   layer.textContent = '';
@@ -23,6 +76,7 @@ export function renderLinks(layer, store) {
 
   for (const node of page.nodes) {
     if (!node.link || !node.link.action || node.link.action === 'none') continue;
+    const trig = triggerLabel(node.link.trigger || 'click');
     const from = { x: node.x + node.w, y: node.y + node.h / 2 };
 
     let to = null;
@@ -32,7 +86,10 @@ export function renderLinks(layer, store) {
       const target = store.project.pages.find((p) => p.id === node.link.targetPageId);
       if (!target) continue;
       to = { x: device.w - 10, y: from.y };
-      label = '→ ' + target.name;
+      label = trig + ' → ' + target.name;
+    } else if (node.link.action === 'url') {
+      to = { x: device.w - 10, y: from.y };
+      label = trig + ' → 链接';
     } else if (node.link.action === 'state') {
       const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
       if (!target) continue;
@@ -42,12 +99,12 @@ export function renderLinks(layer, store) {
         const st = target.states.find((s) => s.id === node.link.targetStateId);
         if (st) stName = st.name;
       }
-      label = '切状态 → ' + stName;
+      label = trig + ' → ' + stName;
     } else {
       const target = page.nodes.find((n) => n.id === node.link.targetNodeId);
       if (!target) continue;
       to = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
-      label = node.link.action === 'show' ? '显示' : (node.link.action === 'hide' ? '隐藏' : '切换');
+      label = trig + ' → ' + actionLabel(node.link.action);
     }
 
     const path = document.createElementNS(SVG_NS, 'path');
@@ -66,7 +123,7 @@ export function renderLinks(layer, store) {
     svg.appendChild(circle);
 
     const text = document.createElementNS(SVG_NS, 'text');
-    text.setAttribute('x', String(node.link.action === 'navigate' ? Math.max(8, to.x - 96) : to.x + 6));
+    text.setAttribute('x', String(node.link.action === 'navigate' || node.link.action === 'url' ? Math.max(8, to.x - 110) : to.x + 6));
     text.setAttribute('y', String(to.y - 6));
     text.setAttribute('fill', '#1677ff');
     text.setAttribute('stroke', 'rgba(255,255,255,0.92)');
@@ -85,7 +142,7 @@ export function renderLinks(layer, store) {
 }
 
 /**
- * 预览运行时：页面跳转、显隐切换、组件状态切换。
+ * 预览运行时：页面跳转、显隐切换、组件状态切换、滚动到、打开链接。
  * project 传进来的应是深拷贝，运行时允许改动其 activeStateId。
  */
 export function createPreviewRuntime(project, startPageId, mount) {
@@ -110,25 +167,17 @@ export function createPreviewRuntime(project, startPageId, mount) {
 
     const nodeEls = new Map();
 
-    function bind(node, el) {
-      el.style.cursor = node.link ? 'pointer' : 'default';
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        runLink(node);
-      });
-    }
-
     function rerenderNode(node) {
       const old = nodeEls.get(node.id);
       if (!old) return;
       const fresh = createNodeEl(node, { interactive: true });
       if (hiddenState.get(node.id) === true) fresh.style.display = 'none';
-      bind(node, fresh);
+      attach(node, fresh);
       old.replaceWith(fresh);
       nodeEls.set(node.id, fresh);
     }
 
-    function runLink(node) {
+    function runAction(node) {
       const link = node.link;
       if (!link || !link.action || link.action === 'none') return;
 
@@ -138,6 +187,11 @@ export function createPreviewRuntime(project, startPageId, mount) {
           hiddenState.clear();
           render();
         }
+        return;
+      }
+
+      if (link.action === 'url') {
+        if (link.url) window.open(link.url, '_blank', 'noopener');
         return;
       }
 
@@ -170,6 +224,17 @@ export function createPreviewRuntime(project, startPageId, mount) {
         const isHidden = el.style.display === 'none';
         el.style.display = isHidden ? '' : 'none';
         hiddenState.set(target.id, !isHidden);
+      } else if (link.action === 'scrollTo') {
+        if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+
+    function attach(node, el) {
+      const link = node.link;
+      if (link && link.action && link.action !== 'none' && (link.trigger || 'click') !== 'load') {
+        bindTriggers(el, link, () => runAction(node));
+      } else {
+        el.style.cursor = 'default';
       }
     }
 
@@ -177,12 +242,20 @@ export function createPreviewRuntime(project, startPageId, mount) {
       if (node.hidden) continue;
       const el = createNodeEl(node, { interactive: true });
       if (hiddenState.get(node.id) === true) el.style.display = 'none';
-      bind(node, el);
+      attach(node, el);
       host.appendChild(el);
       nodeEls.set(node.id, el);
     }
 
     mount.appendChild(host);
+
+    // 载入时触发（延后一帧，避免与渲染打架）
+    const loads = page.nodes.filter((n) => n.link && n.link.action && n.link.action !== 'none' && (n.link.trigger || 'click') === 'load');
+    if (loads.length) {
+      setTimeout(() => {
+        for (const n of loads) runAction(n);
+      }, 60);
+    }
   }
 
   return {

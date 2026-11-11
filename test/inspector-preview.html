@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>inspector preview</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>body{background:#14171c;margin:0;padding:12px;width:280px;}</style>
+</head>
+<body>
+<div id="host"></div>
+<script type="module">
+import { Store } from '../src/store.js';
+import { createProject } from '../src/model.js';
+import { renderInspector } from '../src/inspector.js';
+
+const s = new Store();
+s.state.project = createProject('预览');
+const btn = s.addNode('button', { x: 41, y: 300, w: 320, h: 44, text: '登录' });
+s.addPage('待办列表页');
+s.setActivePage(s.project.pages[0].id);
+const st = s.addState(btn.id, '按下态');
+s.setActiveState(btn.id, st.id);
+s.updateNode(btn.id, {
+  link: { action: 'navigate', trigger: 'longpress', targetPageId: s.project.pages[1].id }
+});
+s.select([btn.id]);
+
+renderInspector(document.getElementById('host'), s, {
+  update(id, patch) { s.updateNode(id, patch); },
+  toast() {},
+  align() {},
+  bringForward() {},
+  sendBackward() {},
+  bringToFront() {},
+  sendToBack() {}
+});
+document.title = 'inspector ready';
+</script>
+</body>
+</html>
