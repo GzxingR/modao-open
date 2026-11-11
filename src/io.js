@@ -2,7 +2,7 @@
  * 导入导出：PNG / 项目 JSON / 规格清单
  */
 
-import { renderPage } from './nodes.js';
+import { renderPage, createNodeEl } from './nodes.js';
 import { getDevice, resolveDevice } from './model.js';
 
 function downloadBlob(blob, filename) {
@@ -79,6 +79,83 @@ export async function exportAllPagesPNG(project, onProgress) {
     await new Promise((r) => setTimeout(r, 420));
   }
   return ok;
+}
+
+/** 单独把一个元素渲染成 PNG dataURL（切图用，透明背景） */
+export async function renderNodeToDataURL(node, scale = 2) {
+  const clone = Object.assign({}, node, { x: 0, y: 0, rotation: 0, hidden: false });
+  const el = createNodeEl(clone, { interactive: true });
+  el.style.left = '0px';
+  el.style.top = '0px';
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText =
+    'position:relative;width:' + node.w + 'px;height:' + node.h + 'px;background:transparent;overflow:hidden;';
+  wrapper.appendChild(el);
+
+  const xml = new XMLSerializer().serializeToString(wrapper);
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + node.w + '" height="' + node.h + '">' +
+    '<foreignObject x="0" y="0" width="' + node.w + '" height="' + node.h + '">' +
+    '<div xmlns="http://www.w3.org/1999/xhtml">' + xml + '</div>' +
+    '</foreignObject></svg>';
+
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, node.w * scale);
+        canvas.height = Math.max(1, node.h * scale);
+        const g = canvas.getContext('2d');
+        g.scale(scale, scale);
+        g.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('元素切图失败'));
+    img.src = url;
+  });
+
+  return { dataUrl, width: node.w * scale, height: node.h * scale };
+}
+
+/** 元素的交付规格文本（标注模式用） */
+export function buildNodeSpecText(node) {
+  const lines = [];
+  lines.push('类型：' + typeLabel(node.type));
+  lines.push('位置：x=' + node.x + '，y=' + node.y);
+  lines.push('尺寸：' + node.w + ' × ' + node.h);
+  if (node.radius) lines.push('圆角：' + node.radius + 'px');
+  lines.push('填充：' + (node.bg && node.bg !== 'transparent' ? node.bg : '无'));
+  if (node.borderWidth) lines.push('描边：' + node.borderWidth + 'px ' + (node.borderColor || '#e5e5e5'));
+  if (typeof node.opacity === 'number' && node.opacity !== 1) lines.push('透明度：' + Math.round(node.opacity * 100) + '%');
+  if (node.text) {
+    lines.push('文字：「' + node.text + '」');
+    lines.push('字体：' + (node.fontSize || 16) + 'px / ' + (node.fontWeight >= 700 ? 'bold' : String(node.fontWeight || 400)) + ' / ' + (node.color || '#222222'));
+    if (node.lineHeight && node.lineHeight !== 1.4) lines.push('行高：' + node.lineHeight);
+    if (node.align && node.align !== 'left') lines.push('对齐：' + node.align);
+  }
+  if (node.type === 'icon') lines.push('图标：' + (node.icon || 'heart'));
+  if (node.type === 'image') lines.push('图片：' + (node.src ? '已上传' : '占位'));
+  if (node.type === 'group') lines.push('分组：' + ((node.children && node.children.length) || 0) + ' 个元素');
+  if (node.link && node.link.action && node.link.action !== 'none') {
+    lines.push('交互：' + (node.link.trigger || 'click') + ' → ' + node.link.action);
+  }
+  return lines.join('\n');
+}
+
+/** 把单个元素导出成切图文件 */
+export async function exportNodePNG(node, projectName) {
+  const { dataUrl } = await renderNodeToDataURL(node);
+  const base64 = dataUrl.split(',')[1];
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  const label = (node.text || typeLabel(node.type)).replace(/\s+/g, '_').slice(0, 20);
+  downloadBlob(new Blob([bytes], { type: 'image/png' }), safeName(projectName + '-' + label) + '.png');
 }
 
 /** 把页面导出成 PNG 文件 */

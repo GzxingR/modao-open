@@ -8,9 +8,10 @@ import { createCanvas } from './canvas.js';
 import { renderPageList, renderLibrary, renderLayerList } from './library.js';
 import { renderInspector } from './inspector.js';
 import { renderLinks, createPreviewRuntime } from './links.js';
-import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, buildSpecText } from './io.js';
+import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, buildSpecText, buildNodeSpecText, exportNodePNG } from './io.js';
 import { renderAIPanel, generatePage } from './ai.js';
 import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
+import { downloadProjectPDF } from './pdf.js';
 import { buildAssignmentProject } from './presets.js';
 
 /* ---------------- DOM ---------------- */
@@ -72,7 +73,13 @@ function btn(label, onClick, cls) {
 }
 
 /* ---------------- 画布 ---------------- */
-const canvas = createCanvas({ canvasHost, nodesLayer, hintsLayer, store });
+const canvas = createCanvas({
+  canvasHost,
+  nodesLayer,
+  hintsLayer,
+  store,
+  onInspect(node) { openInspect(node); }
+});
 
 const handlers = {
   addComponent(type) {
@@ -103,6 +110,8 @@ function renderAll(reason) {
   zoomLabel.textContent = Math.round(store.state.zoom * 100) + '%';
   $('gridBtn').classList.toggle('on', !!store.state.showGrid);
   $('linkBtn').classList.toggle('on', !!store.state.showLinks);
+  $('inspectBtn').classList.toggle('on', !!store.state.inspectMode);
+  canvasHost.style.cursor = store.state.inspectMode ? 'crosshair' : 'default';
   void reason;
 }
 
@@ -138,6 +147,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   else if (act === 'zoom-fit') canvas.fit();
   else if (act === 'toggle-grid') store.toggleGrid();
   else if (act === 'toggle-links') store.toggleLinks();
+  else if (act === 'inspect') store.toggleInspect();
 });
 
 document.querySelector('.right-actions').addEventListener('click', async (e) => {
@@ -311,6 +321,40 @@ $('previewRestart').addEventListener('click', () => {
   if (mask._runtime) mask._runtime.restart();
 });
 
+/* ---------------- 标注模式 ---------------- */
+function openInspect(node) {
+  const spec = buildNodeSpecText(node);
+  openModal('标注 · ' + (node.text || node.type), () => {
+    const wrap = document.createElement('div');
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = '标注模式下点元素即可查看规格；可以复制给开发，也可以只导出这个元素的切图。';
+    const ta = document.createElement('textarea');
+    ta.value = spec;
+    ta.readOnly = true;
+    ta.style.minHeight = '220px';
+    wrap.appendChild(hint);
+    wrap.appendChild(ta);
+    return wrap;
+  }, () => {
+    const box = document.createElement('div');
+    box.style.cssText = 'display:flex;gap:8px;';
+    box.appendChild(btn('复制规格', async () => {
+      try {
+        await navigator.clipboard.writeText(spec);
+        toast('已复制');
+      } catch (e) { toast('复制失败，请手动选中'); }
+    }));
+    box.appendChild(btn('导出切图', async () => {
+      try {
+        await exportNodePNG(node, store.project.name);
+        toast('切图已导出');
+      } catch (e) { toast('失败：' + e.message); }
+    }));
+    return box;
+  });
+}
+
 /* ---------------- 导出菜单 ---------------- */
 function openExportMenu() {
   const pageCount = store.project.pages.length;
@@ -339,6 +383,16 @@ function openExportMenu() {
       run: () => {
         const size = downloadStandaloneHtml(store.project);
         toast('已导出演示 HTML（' + Math.round(size / 1024) + ' KB）');
+      }
+    },
+    {
+      label: '全部页面 PDF',
+      desc: '每页一张、按画布尺寸排版，可直接打印或投屏',
+      run: async () => {
+        const size = await downloadProjectPDF(store.project, (i, total, name) => {
+          toast('生成 PDF ' + i + '/' + total + '：' + name);
+        });
+        toast('PDF 已导出（' + Math.round(size / 1024) + ' KB）');
       }
     },
     {

@@ -164,6 +164,10 @@ export function createCanvas(ctx) {
   function onNodePointerDown(e, node) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    if (store.state.inspectMode) {
+      if (ctx.onInspect) ctx.onInspect(node);
+      return;
+    }
     if (node.locked) return;
 
     if (e.shiftKey) {

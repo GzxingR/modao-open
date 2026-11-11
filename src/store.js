@@ -19,6 +19,7 @@ export class Store {
       zoom: 1,
       showGrid: true,
       showLinks: true,
+      inspectMode: false,
       fitRequested: true
     };
     this.listeners = new Set();
@@ -533,6 +534,12 @@ export class Store {
   toggleGrid() { this.state.showGrid = !this.state.showGrid; this.emit('view'); }
 
   toggleLinks() { this.state.showLinks = !this.state.showLinks; this.emit('view'); }
+
+  /** 标注模式：点元素看规格、导切图 */
+  toggleInspect() {
+    this.state.inspectMode = !this.state.inspectMode;
+    this.emit('view');
+  }
 
   /* ---------- 持久化 ---------- */
   persist() {

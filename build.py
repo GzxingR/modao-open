@@ -26,6 +26,7 @@ ORDER = [
     "links.js",
     "io.js",
     "exportHtml.js",
+    "pdf.js",
     "ai.js",
     "presets.js",
     "main.js",

@@ -509,6 +509,7 @@ textarea.full {
       <span class="sep"></span>
       <button class="tb" data-act="toggle-grid" title="网格/参考线" id="gridBtn">参考线</button>
       <button class="tb" data-act="toggle-links" title="显示交互连线" id="linkBtn">连线</button>
+      <button class="tb" data-act="inspect" title="标注模式：点元素看规格、导切图" id="inspectBtn">标注</button>
     </div>
 
     <div class="right-actions">
@@ -975,6 +976,7 @@ class Store {
       zoom: 1,
       showGrid: true,
       showLinks: true,
+      inspectMode: false,
       fitRequested: true
     };
     this.listeners = new Set();
@@ -1489,6 +1491,12 @@ class Store {
   toggleGrid() { this.state.showGrid = !this.state.showGrid; this.emit('view'); }
 
   toggleLinks() { this.state.showLinks = !this.state.showLinks; this.emit('view'); }
+
+  /** 标注模式：点元素看规格、导切图 */
+  toggleInspect() {
+    this.state.inspectMode = !this.state.inspectMode;
+    this.emit('view');
+  }
 
   /* ---------- 持久化 ---------- */
   persist() {
@@ -2029,6 +2037,10 @@ function createCanvas(ctx) {
   function onNodePointerDown(e, node) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    if (store.state.inspectMode) {
+      if (ctx.onInspect) ctx.onInspect(node);
+      return;
+    }
     if (node.locked) return;
 
     if (e.shiftKey) {
@@ -3329,6 +3341,83 @@ async function exportAllPagesPNG(project, onProgress) {
   return ok;
 }
 
+/** 单独把一个元素渲染成 PNG dataURL（切图用，透明背景） */
+async function renderNodeToDataURL(node, scale = 2) {
+  const clone = Object.assign({}, node, { x: 0, y: 0, rotation: 0, hidden: false });
+  const el = createNodeEl(clone, { interactive: true });
+  el.style.left = '0px';
+  el.style.top = '0px';
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText =
+    'position:relative;width:' + node.w + 'px;height:' + node.h + 'px;background:transparent;overflow:hidden;';
+  wrapper.appendChild(el);
+
+  const xml = new XMLSerializer().serializeToString(wrapper);
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + node.w + '" height="' + node.h + '">' +
+    '<foreignObject x="0" y="0" width="' + node.w + '" height="' + node.h + '">' +
+    '<div xmlns="http://www.w3.org/1999/xhtml">' + xml + '</div>' +
+    '</foreignObject></svg>';
+
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, node.w * scale);
+        canvas.height = Math.max(1, node.h * scale);
+        const g = canvas.getContext('2d');
+        g.scale(scale, scale);
+        g.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('元素切图失败'));
+    img.src = url;
+  });
+
+  return { dataUrl, width: node.w * scale, height: node.h * scale };
+}
+
+/** 元素的交付规格文本（标注模式用） */
+function buildNodeSpecText(node) {
+  const lines = [];
+  lines.push('类型：' + typeLabel(node.type));
+  lines.push('位置：x=' + node.x + '，y=' + node.y);
+  lines.push('尺寸：' + node.w + ' × ' + node.h);
+  if (node.radius) lines.push('圆角：' + node.radius + 'px');
+  lines.push('填充：' + (node.bg && node.bg !== 'transparent' ? node.bg : '无'));
+  if (node.borderWidth) lines.push('描边：' + node.borderWidth + 'px ' + (node.borderColor || '#e5e5e5'));
+  if (typeof node.opacity === 'number' && node.opacity !== 1) lines.push('透明度：' + Math.round(node.opacity * 100) + '%');
+  if (node.text) {
+    lines.push('文字：「' + node.text + '」');
+    lines.push('字体：' + (node.fontSize || 16) + 'px / ' + (node.fontWeight >= 700 ? 'bold' : String(node.fontWeight || 400)) + ' / ' + (node.color || '#222222'));
+    if (node.lineHeight && node.lineHeight !== 1.4) lines.push('行高：' + node.lineHeight);
+    if (node.align && node.align !== 'left') lines.push('对齐：' + node.align);
+  }
+  if (node.type === 'icon') lines.push('图标：' + (node.icon || 'heart'));
+  if (node.type === 'image') lines.push('图片：' + (node.src ? '已上传' : '占位'));
+  if (node.type === 'group') lines.push('分组：' + ((node.children && node.children.length) || 0) + ' 个元素');
+  if (node.link && node.link.action && node.link.action !== 'none') {
+    lines.push('交互：' + (node.link.trigger || 'click') + ' → ' + node.link.action);
+  }
+  return lines.join('\n');
+}
+
+/** 把单个元素导出成切图文件 */
+async function exportNodePNG(node, projectName) {
+  const { dataUrl } = await renderNodeToDataURL(node);
+  const base64 = dataUrl.split(',')[1];
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  const label = (node.text || typeLabel(node.type)).replace(/\s+/g, '_').slice(0, 20);
+  downloadBlob(new Blob([bytes], { type: 'image/png' }), safeName(projectName + '-' + label) + '.png');
+}
+
 /** 把页面导出成 PNG 文件 */
 async function exportPagePNG(page, projectName) {
   const { dataUrl } = await renderPageToDataURL(page);
@@ -3684,6 +3773,166 @@ function downloadStandaloneHtml(project) {
   return html.length;
 }
 
+/* ===== src/pdf.js ===== */
+/**
+ * 无依赖 PDF 导出：每页渲染成 JPEG，嵌进最小 PDF 结构（DCTDecode）。
+ * 不引入任何库，生成的就是标准 PDF，可直接打印或发给别人。
+ */
+
+
+
+
+const PT_PER_PX = 0.75; // 96dpi → 72dpi
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('图片解码失败'));
+    img.src = src;
+  });
+}
+
+async function pageToJpeg(page) {
+  const { dataUrl } = await renderPageToDataURL(page);
+  const img = await loadImage(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const g = canvas.getContext('2d');
+  g.fillStyle = page.bg || '#ffffff';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0);
+  const jpeg = canvas.toDataURL('image/jpeg', 0.92);
+  return {
+    bytes: b64ToBytes(jpeg.split(',')[1]),
+    pxW: img.width,
+    pxH: img.height
+  };
+}
+
+function assemblePDF(pages, title) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const offsets = [];
+  let offset = 0;
+
+  function push(data) {
+    const u8 = typeof data === 'string' ? enc.encode(data) : data;
+    chunks.push(u8);
+    offset += u8.length;
+  }
+
+  function obj(n, body) {
+    offsets[n] = offset;
+    push(n + ' 0 obj\n');
+    push(body);
+    push('\nendobj\n');
+  }
+
+  // 头部 + 二进制标记注释
+  push('%PDF-1.4\n');
+  push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+
+  const count = pages.length;
+  const kids = [];
+  for (let i = 0; i < count; i += 1) kids.push((3 + i * 3) + ' 0 R');
+
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + count + ' >>');
+
+  for (let i = 0; i < count; i += 1) {
+    const p = pages[i];
+    const pageNum = 3 + i * 3;
+    const contentNum = pageNum + 1;
+    const imgNum = pageNum + 2;
+    const w = (p.ptW).toFixed(2);
+    const h = (p.ptH).toFixed(2);
+
+    obj(pageNum, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + w + ' ' + h +
+      '] /Resources << /XObject << /Im0 ' + imgNum + ' 0 R >> >> /Contents ' + contentNum + ' 0 R >>');
+
+    const content = 'q\n' + w + ' 0 0 ' + h + ' 0 0 cm\n/Im0 Do\nQ\n';
+    const contentBytes = enc.encode(content);
+    obj(contentNum, '<< /Length ' + contentBytes.length + ' >>\nstream\n' + content + 'endstream');
+
+    // 图像对象要把 header 和二进制分开推
+    offsets[imgNum] = offset;
+    push(imgNum + ' 0 obj\n');
+    push('<< /Type /XObject /Subtype /Image /Width ' + p.pxW + ' /Height ' + p.pxH +
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + p.jpg.length + ' >>\nstream\n');
+    push(p.jpg);
+    push('\nendstream\nendobj\n');
+  }
+
+  // 文档信息
+  const infoNum = 3 + count * 3;
+  const safeTitle = String(title || 'prototype').replace(/[\\()]/g, ' ');
+  obj(infoNum, '<< /Title (' + safeTitle + ') /Producer (modao-open) >>');
+
+  const totalObjects = infoNum;
+  const xrefStart = offset;
+
+  let xref = 'xref\n0 ' + (totalObjects + 1) + '\n';
+  xref += '0000000000 65535 f \n';
+  for (let n = 1; n <= totalObjects; n += 1) {
+    const off = String(offsets[n] || 0).padStart(10, '0');
+    xref += off + ' 00000 n \n';
+  }
+  push(xref);
+
+  push('trailer\n<< /Size ' + (totalObjects + 1) + ' /Root 1 0 R /Info ' + infoNum + ' 0 R >>\n');
+  push('startxref\n' + xrefStart + '\n%%EOF\n');
+
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let cursor = 0;
+  for (const c of chunks) {
+    out.set(c, cursor);
+    cursor += c.length;
+  }
+  return out;
+}
+
+async function buildProjectPDF(project, onProgress) {
+  const pages = [];
+  for (let i = 0; i < project.pages.length; i += 1) {
+    const page = project.pages[i];
+    if (onProgress) onProgress(i + 1, project.pages.length, page.name);
+    const dev = resolveDevice(page);
+    const jpg = await pageToJpeg(page);
+    pages.push({
+      jpg: jpg.bytes,
+      pxW: jpg.pxW,
+      pxH: jpg.pxH,
+      ptW: dev.w * PT_PER_PX,
+      ptH: dev.h * PT_PER_PX
+    });
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  return assemblePDF(pages, project.name);
+}
+
+async function downloadProjectPDF(project, onProgress) {
+  const bytes = await buildProjectPDF(project, onProgress);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = String(project.name || 'prototype').replace(/[\\/:*?"<>|]+/g, '_') + '.pdf';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return bytes.length;
+}
+
 /* ===== src/ai.js ===== */
 /**
  * AI 生成（BYO API Key）：OpenAI 兼容 /chat/completions
@@ -4009,6 +4258,7 @@ function buildAssignmentProject() {
 
 
 
+
 /* ---------------- DOM ---------------- */
 const $ = (id) => document.getElementById(id);
 const canvasHost = $('canvasHost');
@@ -4068,7 +4318,13 @@ function btn(label, onClick, cls) {
 }
 
 /* ---------------- 画布 ---------------- */
-const canvas = createCanvas({ canvasHost, nodesLayer, hintsLayer, store });
+const canvas = createCanvas({
+  canvasHost,
+  nodesLayer,
+  hintsLayer,
+  store,
+  onInspect(node) { openInspect(node); }
+});
 
 const handlers = {
   addComponent(type) {
@@ -4099,6 +4355,8 @@ function renderAll(reason) {
   zoomLabel.textContent = Math.round(store.state.zoom * 100) + '%';
   $('gridBtn').classList.toggle('on', !!store.state.showGrid);
   $('linkBtn').classList.toggle('on', !!store.state.showLinks);
+  $('inspectBtn').classList.toggle('on', !!store.state.inspectMode);
+  canvasHost.style.cursor = store.state.inspectMode ? 'crosshair' : 'default';
   void reason;
 }
 
@@ -4134,6 +4392,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   else if (act === 'zoom-fit') canvas.fit();
   else if (act === 'toggle-grid') store.toggleGrid();
   else if (act === 'toggle-links') store.toggleLinks();
+  else if (act === 'inspect') store.toggleInspect();
 });
 
 document.querySelector('.right-actions').addEventListener('click', async (e) => {
@@ -4307,6 +4566,40 @@ $('previewRestart').addEventListener('click', () => {
   if (mask._runtime) mask._runtime.restart();
 });
 
+/* ---------------- 标注模式 ---------------- */
+function openInspect(node) {
+  const spec = buildNodeSpecText(node);
+  openModal('标注 · ' + (node.text || node.type), () => {
+    const wrap = document.createElement('div');
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = '标注模式下点元素即可查看规格；可以复制给开发，也可以只导出这个元素的切图。';
+    const ta = document.createElement('textarea');
+    ta.value = spec;
+    ta.readOnly = true;
+    ta.style.minHeight = '220px';
+    wrap.appendChild(hint);
+    wrap.appendChild(ta);
+    return wrap;
+  }, () => {
+    const box = document.createElement('div');
+    box.style.cssText = 'display:flex;gap:8px;';
+    box.appendChild(btn('复制规格', async () => {
+      try {
+        await navigator.clipboard.writeText(spec);
+        toast('已复制');
+      } catch (e) { toast('复制失败，请手动选中'); }
+    }));
+    box.appendChild(btn('导出切图', async () => {
+      try {
+        await exportNodePNG(node, store.project.name);
+        toast('切图已导出');
+      } catch (e) { toast('失败：' + e.message); }
+    }));
+    return box;
+  });
+}
+
 /* ---------------- 导出菜单 ---------------- */
 function openExportMenu() {
   const pageCount = store.project.pages.length;
@@ -4335,6 +4628,16 @@ function openExportMenu() {
       run: () => {
         const size = downloadStandaloneHtml(store.project);
         toast('已导出演示 HTML（' + Math.round(size / 1024) + ' KB）');
+      }
+    },
+    {
+      label: '全部页面 PDF',
+      desc: '每页一张、按画布尺寸排版，可直接打印或投屏',
+      run: async () => {
+        const size = await downloadProjectPDF(store.project, (i, total, name) => {
+          toast('生成 PDF ' + i + '/' + total + '：' + name);
+        });
+        toast('PDF 已导出（' + Math.round(size / 1024) + ' KB）');
       }
     },
     {
