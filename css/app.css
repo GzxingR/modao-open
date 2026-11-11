@@ -676,6 +676,28 @@ textarea.full {
   font-size: 11px;
 }
 
+/* ---------- 键盘焦点与触屏 ---------- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button:focus:not(:focus-visible) { outline: none; }
+
+/* 触摸屏上画布自己处理手势，避免浏览器抢走双指缩放 */
+.canvas-host { touch-action: none; }
+
+@media (pointer: coarse) {
+  .icon-btn { width: 38px; height: 38px; }
+  .icon-btn svg { width: 19px; height: 19px; }
+  .tb { padding: 7px 12px; font-size: 13px; }
+  .ctx-item { padding: 10px 12px; font-size: 13px; }
+  .layer-item { padding: 8px 6px; }
+  .layer-item .l-btn { width: 26px; height: 26px; }
+  .mini { min-width: 26px; min-height: 26px; }
+  .lib-item { padding: 12px 4px; }
+  .seg button { padding: 6px 10px; }
+}
+
 /* ---------- preview ---------- */
 .preview-mask {
   position: fixed;

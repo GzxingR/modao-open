@@ -3,6 +3,7 @@
  */
 
 import { createNodeEl } from './nodes.js';
+import { distance, pinchZoom } from './keys.js';
 
 const SNAP = 4;
 
@@ -438,6 +439,39 @@ export function createCanvas(ctx) {
     if (id && !store.isSelected(id)) store.select([id]);
     if (ctx.onContextMenu) ctx.onContextMenu(e.clientX, e.clientY, id);
   });
+
+  /* ---------------- 双指缩放（触摸屏） ---------------- */
+
+  const touchPointers = new Map();
+  let pinchStart = null;
+
+  function trackDown(e) {
+    if (e.pointerType !== 'touch') return;
+    touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPointers.size === 2) {
+      const pts = Array.from(touchPointers.values());
+      pinchStart = { dist: distance(pts[0], pts[1]), zoom: store.state.zoom };
+    }
+  }
+
+  function trackMove(e) {
+    if (!touchPointers.has(e.pointerId)) return;
+    touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPointers.size !== 2 || !pinchStart) return;
+    const pts = Array.from(touchPointers.values());
+    const next = pinchZoom(pinchStart.zoom, pinchStart.dist, distance(pts[0], pts[1]), 0.1, 3);
+    if (Math.abs(next - store.state.zoom) > 0.001) store.setZoom(next);
+  }
+
+  function trackEnd(e) {
+    touchPointers.delete(e.pointerId);
+    if (touchPointers.size < 2) pinchStart = null;
+  }
+
+  canvasHost.addEventListener('pointerdown', trackDown, true);
+  canvasHost.addEventListener('pointermove', trackMove, true);
+  canvasHost.addEventListener('pointerup', trackEnd, true);
+  canvasHost.addEventListener('pointercancel', trackEnd, true);
 
   /* ---------------- 初始化 ---------------- */
 

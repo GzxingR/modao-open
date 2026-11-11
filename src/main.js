@@ -12,7 +12,8 @@ import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, b
 import { renderAIPanel, generatePage } from './ai.js';
 import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
 import { downloadProjectPDF } from './pdf.js';
-import { openMenu, hideMenu } from './contextmenu.js';
+import { openMenu, hideMenu, isMenuOpen } from './contextmenu.js';
+import { decideEscape, ariaLabels } from './keys.js';
 import { initResizers } from './resizer.js';
 import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
 import { renderHelpContent } from './help.js';
@@ -313,6 +314,21 @@ window.addEventListener('keydown', (e) => {
 
   const meta = e.ctrlKey || e.metaKey;
 
+  if (e.key === 'Escape') {
+    const action = decideEscape({
+      menuOpen: isMenuOpen(),
+      previewOpen: !$('previewMask').hidden,
+      modalOpen: !modal.hidden,
+      hasSelection: store.state.selection.length > 0
+    });
+    if (action === 'close-menu') hideMenu();
+    else if (action === 'close-preview') closePreview();
+    else if (action === 'close-modal') closeModal();
+    else if (action === 'clear-selection') store.select([]);
+    if (action !== 'none') e.preventDefault();
+    return;
+  }
+
   if (e.code === 'Space') {
     e.preventDefault();
     store.setSpacePanning(true);
@@ -442,11 +458,14 @@ function openPreview() {
   mask._runtime = runtime;
 }
 
-$('previewClose').addEventListener('click', () => {
+$('previewClose').addEventListener('click', closePreview);
+
+function closePreview() {
   const mask = $('previewMask');
   if (mask._runtime && mask._runtime.destroy) mask._runtime.destroy();
+  mask._runtime = null;
   mask.hidden = true;
-});
+}
 $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
@@ -766,6 +785,7 @@ function boot() {
 
   renderAll('boot');
   initResizers();
+  ariaLabels();
   if (view) restoreScroll(stageScrollEl, view);
 
   if (/[?&]help=1/.test(location.search)) {

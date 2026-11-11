@@ -24,6 +24,7 @@ ORDER = [
     "theme.js",
     "help.js",
     "viewstate.js",
+    "keys.js",
     "nodes.js",
     "canvas.js",
     "library.js",
