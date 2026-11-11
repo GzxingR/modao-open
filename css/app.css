@@ -13,6 +13,52 @@
   --warn: #f59e0b;
   --radius: 8px;
   --canvas-bg: #ffffff;
+  --accent-soft: #17304f;
+  --accent-soft-text: #cfe2ff;
+  --hover: #2c323d;
+  --stage-bg: linear-gradient(180deg, #101317, #161a20);
+  --panel-solid: #21262f;
+  --toast-bg: #2b3240;
+  --ai-color: #d9d0ff;
+  --canvas-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* 浅色主题 */
+:root[data-theme="light"] {
+  --bg-app: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #f2f3f5;
+  --bg-input: #f7f8fa;
+  --line: #e3e4e6;
+  --text: #1b1f24;
+  --text-dim: #6b7280;
+  --accent-soft: #e8f0fe;
+  --accent-soft-text: #0b5cd5;
+  --hover: #eceef1;
+  --stage-bg: linear-gradient(180deg, #eceef1, #f7f8fa);
+  --panel-solid: #ffffff;
+  --toast-bg: #39414f;
+  --ai-color: #6d4aff;
+  --canvas-shadow: 0 8px 28px rgba(20, 30, 50, 0.16);
+}
+
+/* 跟随系统：系统是浅色时套用浅色变量 */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    --bg-app: #f4f5f7;
+    --bg-panel: #ffffff;
+    --bg-panel-2: #f2f3f5;
+    --bg-input: #f7f8fa;
+    --line: #e3e4e6;
+    --text: #1b1f24;
+    --text-dim: #6b7280;
+    --accent-soft: #e8f0fe;
+    --accent-soft-text: #0b5cd5;
+    --hover: #eceef1;
+    --stage-bg: linear-gradient(180deg, #eceef1, #f7f8fa);
+    --panel-solid: #ffffff;
+    --toast-bg: #39414f;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -70,8 +116,8 @@ body {
   white-space: nowrap;
 }
 .tb:hover { border-color: #3f4756; background: #262c36; }
-.tb.on { border-color: var(--accent); color: #cfe2ff; background: #17304f; }
-.tb.ai { border-color: #6d4aff; color: #d9d0ff; }
+.tb.on { border-color: var(--accent); color: var(--accent-soft-text); background: var(--accent-soft); }
+.tb.ai { border-color: #6d4aff; color: var(--ai-color); }
 .tb.ai:hover { background: #241a3d; }
 
 .tb-select {
@@ -103,7 +149,7 @@ body {
   flex: 0 0 auto;
 }
 .icon-btn:hover { background: var(--bg-panel-2); color: var(--text); border-color: var(--line); }
-.icon-btn.on { background: #17304f; color: #cfe2ff; border-color: var(--accent); }
+.icon-btn.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: var(--accent); }
 .icon-btn svg {
   width: 16px;
   height: 16px;
@@ -171,7 +217,7 @@ body {
   font-size: 12px;
 }
 .page-item:hover { background: var(--bg-panel-2); color: var(--text); }
-.page-item.active { background: #17304f; color: #cfe2ff; }
+.page-item.active { background: var(--accent-soft); color: var(--accent-soft-text); }
 .page-item .p-icon { display: flex; align-items: center; opacity: .7; flex: 0 0 auto; }
 .page-item .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-item .del { opacity: 0; font-size: 11px; }
@@ -209,7 +255,7 @@ body {
   background: transparent;
   position: relative;
 }
-.resizer:hover { background: #2c323d; }
+.resizer:hover { background: var(--hover); }
 .resizer::after {
   content: '';
   position: absolute;
@@ -250,7 +296,7 @@ body {
   color: var(--text-dim);
 }
 .layer-item:hover { background: var(--bg-panel-2); color: var(--text); }
-.layer-item.active { background: #17304f; color: #cfe2ff; }
+.layer-item.active { background: var(--accent-soft); color: var(--accent-soft-text); }
 .layer-item.is-hidden { opacity: .45; }
 .layer-item .l-icon {
   width: 14px;
@@ -273,7 +319,7 @@ body {
   flex: 1;
   min-width: 0;
   background:
-    linear-gradient(180deg, #101317, #161a20);
+    var(--stage-bg);
   overflow: hidden;
   position: relative;
 }
@@ -286,7 +332,7 @@ body {
   width: 402px;
   height: 874px;
   background: var(--canvas-bg);
-  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+  box-shadow: var(--canvas-shadow);
   transform-origin: top left;
   overflow: hidden;
 }
@@ -428,7 +474,7 @@ textarea.full {
   padding: 4px 2px;
   cursor: pointer;
 }
-.seg button.on { background: #17304f; color: #cfe2ff; }
+.seg button.on { background: var(--accent-soft); color: var(--accent-soft-text); }
 .seg button + button { border-left: 1px solid var(--line); }
 
 .empty-hint { color: var(--text-dim); font-size: 12px; line-height: 1.7; padding: 8px 2px; }
@@ -446,7 +492,7 @@ textarea.full {
   left: 50%;
   bottom: 28px;
   transform: translateX(-50%) translateY(12px);
-  background: #2b3240;
+  background: var(--toast-bg);
   color: #fff;
   padding: 8px 14px;
   border-radius: 8px;
@@ -528,7 +574,7 @@ textarea.full {
   top: 50%;
   transform: translate(-50%, -50%);
   width: min(320px, 80%);
-  background: rgba(27, 31, 38, 0.97);
+  background: var(--panel-solid);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 18px 20px;
@@ -545,8 +591,8 @@ textarea.full {
 .ctx-menu {
   position: fixed;
   min-width: 176px;
-  background: #21262f;
-  border: 1px solid #333b47;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 4px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
