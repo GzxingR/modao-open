@@ -165,7 +165,7 @@ body {
 }
 .mini:hover { color: var(--text); border-color: #3f4756; }
 
-.page-list { padding: 0 8px 8px; max-height: 34%; overflow: auto; }
+.page-list { padding: 0 8px 8px; overflow: auto; }
 
 .page-item {
   display: flex;
@@ -204,7 +204,47 @@ body {
 .lib-item:hover { border-color: var(--accent); color: var(--text); }
 .lib-item svg { opacity: .9; }
 
-.layer-list { max-height: 26%; overflow: auto; padding: 0 6px 8px; }
+.layer-list { overflow: auto; padding: 0 6px 8px; }
+
+/* 左栏三块面板：可拖拽分隔 */
+.pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.pane .pane-title { flex: 0 0 auto; }
+.pane .page-list, .pane .layer-list, .pane .library { flex: 1 1 auto; min-height: 0; }
+.resizer {
+  flex: 0 0 6px;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+}
+.resizer:hover { background: #2c323d; }
+.resizer::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 2px;
+  height: 1px;
+  background: var(--line);
+}
+.lib-search-wrap { padding: 0 8px 6px; flex: 0 0 auto; }
+.lib-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.lib-search:focus { border-color: var(--accent); }
+.lib-group-title {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: .05em;
+  margin: 6px 0 1px;
+  padding-left: 2px;
+}
 
 .layer-item {
   display: flex;
@@ -660,21 +700,30 @@ textarea.full {
   <div class="body">
 
     <aside class="left">
-      <div class="pane-title">
-        <span>页面</span>
-        <button class="mini" id="addPage" title="新建页面">＋</button>
+      <div class="pane" id="panePages" style="flex:0 0 28%">
+        <div class="pane-title">
+          <span>页面</span>
+          <button class="mini" id="addPage" title="新建页面">＋</button>
+        </div>
+        <div id="pageList" class="page-list"></div>
       </div>
-      <div id="pageList" class="page-list"></div>
 
-      <div class="pane-title">
-        <span>图层</span>
-      </div>
-      <div id="layerList" class="layer-list"></div>
+      <div class="resizer" title="拖动调整高度"></div>
 
-      <div class="pane-title">
-        <span>组件</span>
+      <div class="pane" id="paneLayers" style="flex:0 0 24%">
+        <div class="pane-title"><span>图层</span></div>
+        <div id="layerList" class="layer-list"></div>
       </div>
-      <div id="library" class="library"></div>
+
+      <div class="resizer" title="拖动调整高度"></div>
+
+      <div class="pane" id="paneLibrary" style="flex:1 1 auto">
+        <div class="pane-title"><span>组件</span></div>
+        <div class="lib-search-wrap">
+          <input id="libSearch" class="lib-search" placeholder="搜索组件…" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="library" class="library"></div>
+      </div>
     </aside>
 
     <main class="stage" id="stage">
@@ -1772,6 +1821,79 @@ function isMenuOpen() {
   return !!(menuEl && !menuEl.hidden);
 }
 
+/* ===== src/resizer.js ===== */
+/**
+ * 左栏面板可拖拽分栏：拖动 .resizer 调整相邻两块面板高度，比例存 localStorage。
+ */
+
+const PANE_KEY = 'modao-open:left-panes';
+
+function initResizers(options = {}) {
+  const paneIds = options.paneIds || ['panePages', 'paneLayers', 'paneLibrary'];
+  const container = options.container || document.querySelector('.left');
+  const minHeight = options.minHeight || 72;
+
+  if (!container) return { restore() {}, save() {} };
+
+  function restore() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PANE_KEY) || 'null');
+      if (!Array.isArray(saved) || saved.length !== paneIds.length) return;
+      paneIds.forEach((id, i) => {
+        const el = document.getElementById(id);
+        if (el && typeof saved[i] === 'number' && saved[i] > 0) {
+          el.style.flex = '0 0 ' + saved[i] + '%';
+        }
+      });
+    } catch (e) { /* 坏数据忽略 */ }
+  }
+
+  function save() {
+    const leftH = container.clientHeight || 1;
+    const ratios = paneIds.map((id) => {
+      const el = document.getElementById(id);
+      if (!el) return 0;
+      return Math.round((el.getBoundingClientRect().height / leftH) * 1000) / 10;
+    });
+    try { localStorage.setItem(PANE_KEY, JSON.stringify(ratios)); } catch (e) { /* 忽略 */ }
+    return ratios;
+  }
+
+  restore();
+
+  const resizers = container.querySelectorAll('.resizer');
+  resizers.forEach((rz) => {
+    rz.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const prev = rz.previousElementSibling;
+      const next = rz.nextElementSibling;
+      if (!prev || !next) return;
+
+      const startY = e.clientY;
+      const startPrev = prev.getBoundingClientRect().height;
+      const startNext = next.getBoundingClientRect().height;
+      const total = startPrev + startNext;
+
+      function onMove(ev) {
+        const dy = ev.clientY - startY;
+        const hp = Math.max(minHeight, Math.min(total - minHeight, startPrev + dy));
+        prev.style.flex = '0 0 ' + hp + 'px';
+        next.style.flex = '0 0 ' + (total - hp) + 'px';
+      }
+
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        save();
+      }
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp, { once: true });
+    });
+  });
+
+  return { restore, save };
+}
+
 /* ===== src/nodes.js ===== */
 /**
  * 节点渲染：把数据模型渲染成真实 DOM（画布与预览共用）
@@ -2719,36 +2841,75 @@ function renderLayerList(container, store, handlers) {
   }
 }
 
-function renderLibrary(container, store, handlers) {
+const CATEGORY_LABELS = { basic: '基础', form: '表单', layout: '布局', icon: '图标' };
+const CATEGORY_ORDER = ['basic', 'form', 'layout', 'icon'];
+
+function makeLibItem(comp, handlers) {
+  const item = document.createElement('div');
+  item.className = 'lib-item';
+  item.title = '添加' + comp.label;
+  item.draggable = true;
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', '20');
+  svg.setAttribute('height', '20');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.6');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.innerHTML = comp.icon;
+  item.appendChild(svg);
+
+  const label = document.createElement('span');
+  label.textContent = comp.label;
+  item.appendChild(label);
+
+  item.addEventListener('click', () => handlers.addComponent(comp.type));
+  item.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', comp.type);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  return item;
+}
+
+/**
+ * 组件库。keyword 非空时按名称/类型过滤并平铺；否则按分类分组显示。
+ */
+function renderLibrary(container, store, handlers, keyword) {
+  if (!container) return;
   container.textContent = '';
-  for (const comp of COMPONENTS) {
-    const item = document.createElement('div');
-    item.className = 'lib-item';
-    item.title = '添加' + comp.label;
-    item.draggable = true;
 
-    const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('width', '20');
-    svg.setAttribute('height', '20');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '1.6');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    svg.innerHTML = comp.icon;
-    item.appendChild(svg);
+  const kw = String(keyword || '').trim().toLowerCase();
+  const list = COMPONENTS.filter((c) => {
+    if (!kw) return true;
+    return c.label.toLowerCase().indexOf(kw) >= 0 || c.type.toLowerCase().indexOf(kw) >= 0;
+  });
 
-    const label = document.createElement('span');
-    label.textContent = comp.label;
-    item.appendChild(label);
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-hint lib-empty';
+    empty.style.gridColumn = '1 / -1';
+    empty.style.padding = '10px 4px';
+    empty.textContent = '没有匹配「' + keyword + '」的组件';
+    container.appendChild(empty);
+    return;
+  }
 
-    item.addEventListener('click', () => handlers.addComponent(comp.type));
-    item.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', comp.type);
-      e.dataTransfer.effectAllowed = 'copy';
-    });
-    container.appendChild(item);
+  if (kw) {
+    for (const comp of list) container.appendChild(makeLibItem(comp, handlers));
+    return;
+  }
+
+  for (const cat of CATEGORY_ORDER) {
+    const group = list.filter((c) => (c.category || 'basic') === cat);
+    if (!group.length) continue;
+    const title = document.createElement('div');
+    title.className = 'lib-group-title';
+    title.textContent = CATEGORY_LABELS[cat] || cat;
+    container.appendChild(title);
+    for (const comp of group) container.appendChild(makeLibItem(comp, handlers));
   }
 }
 
@@ -4650,6 +4811,7 @@ function buildAssignmentProject() {
 
 
 
+
 /* ---------------- DOM ---------------- */
 const $ = (id) => document.getElementById(id);
 const canvasHost = $('canvasHost');
@@ -4734,13 +4896,16 @@ const handlers = {
   toast
 };
 
+/* ---------------- 组件库搜索 ---------------- */
+let libKeyword = '';
+
 /* ---------------- 渲染 ---------------- */
 function renderAll(reason) {
   projectNameInput.value = store.project.name;
   deviceSelect.value = store.page.deviceId;
   renderPageList(pageListEl, store, handlers);
   renderLayerList(document.getElementById('layerList'), store, handlers);
-  renderLibrary(libraryEl, store, handlers);
+  renderLibrary(libraryEl, store, handlers, libKeyword);
   canvas.render();
   renderLinks(linksLayer, store);
   renderInspector(inspectorEl, store, handlers);
@@ -4856,6 +5021,18 @@ if (guideEl) {
     if (t && t.dataset && t.dataset.act === 'preset') loadAssignmentPreset();
   });
 }
+
+// 组件库搜索框
+const libSearchEl = document.getElementById('libSearch');
+if (libSearchEl) {
+  libSearchEl.addEventListener('input', () => {
+    libKeyword = libSearchEl.value;
+    renderLibrary(libraryEl, store, handlers, libKeyword);
+  });
+}
+
+/* ---------------- 左栏可拖拽分栏 ---------------- */
+// 逻辑在 src/resizer.js，这里只负责初始化
 
 /* ---------------- 键盘 ---------------- */
 window.addEventListener('keydown', (e) => {
@@ -5277,6 +5454,7 @@ function boot() {
     if (!loaded) seedFirstProject();
   }
   renderAll('boot');
+  initResizers();
 
   requestAnimationFrame(() => {
     canvas.fit();

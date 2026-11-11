@@ -72,21 +72,30 @@
   <div class="body">
 
     <aside class="left">
-      <div class="pane-title">
-        <span>页面</span>
-        <button class="mini" id="addPage" title="新建页面">＋</button>
+      <div class="pane" id="panePages" style="flex:0 0 28%">
+        <div class="pane-title">
+          <span>页面</span>
+          <button class="mini" id="addPage" title="新建页面">＋</button>
+        </div>
+        <div id="pageList" class="page-list"></div>
       </div>
-      <div id="pageList" class="page-list"></div>
 
-      <div class="pane-title">
-        <span>图层</span>
-      </div>
-      <div id="layerList" class="layer-list"></div>
+      <div class="resizer" title="拖动调整高度"></div>
 
-      <div class="pane-title">
-        <span>组件</span>
+      <div class="pane" id="paneLayers" style="flex:0 0 24%">
+        <div class="pane-title"><span>图层</span></div>
+        <div id="layerList" class="layer-list"></div>
       </div>
-      <div id="library" class="library"></div>
+
+      <div class="resizer" title="拖动调整高度"></div>
+
+      <div class="pane" id="paneLibrary" style="flex:1 1 auto">
+        <div class="pane-title"><span>组件</span></div>
+        <div class="lib-search-wrap">
+          <input id="libSearch" class="lib-search" placeholder="搜索组件…" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="library" class="library"></div>
+      </div>
     </aside>
 
     <main class="stage" id="stage">

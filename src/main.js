@@ -13,6 +13,7 @@ import { renderAIPanel, generatePage } from './ai.js';
 import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
 import { downloadProjectPDF } from './pdf.js';
 import { openMenu, hideMenu } from './contextmenu.js';
+import { initResizers } from './resizer.js';
 import { buildAssignmentProject } from './presets.js';
 
 /* ---------------- DOM ---------------- */
@@ -99,13 +100,16 @@ const handlers = {
   toast
 };
 
+/* ---------------- 组件库搜索 ---------------- */
+let libKeyword = '';
+
 /* ---------------- 渲染 ---------------- */
 function renderAll(reason) {
   projectNameInput.value = store.project.name;
   deviceSelect.value = store.page.deviceId;
   renderPageList(pageListEl, store, handlers);
   renderLayerList(document.getElementById('layerList'), store, handlers);
-  renderLibrary(libraryEl, store, handlers);
+  renderLibrary(libraryEl, store, handlers, libKeyword);
   canvas.render();
   renderLinks(linksLayer, store);
   renderInspector(inspectorEl, store, handlers);
@@ -221,6 +225,18 @@ if (guideEl) {
     if (t && t.dataset && t.dataset.act === 'preset') loadAssignmentPreset();
   });
 }
+
+// 组件库搜索框
+const libSearchEl = document.getElementById('libSearch');
+if (libSearchEl) {
+  libSearchEl.addEventListener('input', () => {
+    libKeyword = libSearchEl.value;
+    renderLibrary(libraryEl, store, handlers, libKeyword);
+  });
+}
+
+/* ---------------- 左栏可拖拽分栏 ---------------- */
+// 逻辑在 src/resizer.js，这里只负责初始化
 
 /* ---------------- 键盘 ---------------- */
 window.addEventListener('keydown', (e) => {
@@ -642,6 +658,7 @@ function boot() {
     if (!loaded) seedFirstProject();
   }
   renderAll('boot');
+  initResizers();
 
   requestAnimationFrame(() => {
     canvas.fit();

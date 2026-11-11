@@ -163,35 +163,74 @@ export function renderLayerList(container, store, handlers) {
   }
 }
 
-export function renderLibrary(container, store, handlers) {
+const CATEGORY_LABELS = { basic: '基础', form: '表单', layout: '布局', icon: '图标' };
+const CATEGORY_ORDER = ['basic', 'form', 'layout', 'icon'];
+
+function makeLibItem(comp, handlers) {
+  const item = document.createElement('div');
+  item.className = 'lib-item';
+  item.title = '添加' + comp.label;
+  item.draggable = true;
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', '20');
+  svg.setAttribute('height', '20');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.6');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.innerHTML = comp.icon;
+  item.appendChild(svg);
+
+  const label = document.createElement('span');
+  label.textContent = comp.label;
+  item.appendChild(label);
+
+  item.addEventListener('click', () => handlers.addComponent(comp.type));
+  item.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', comp.type);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  return item;
+}
+
+/**
+ * 组件库。keyword 非空时按名称/类型过滤并平铺；否则按分类分组显示。
+ */
+export function renderLibrary(container, store, handlers, keyword) {
+  if (!container) return;
   container.textContent = '';
-  for (const comp of COMPONENTS) {
-    const item = document.createElement('div');
-    item.className = 'lib-item';
-    item.title = '添加' + comp.label;
-    item.draggable = true;
 
-    const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('width', '20');
-    svg.setAttribute('height', '20');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '1.6');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    svg.innerHTML = comp.icon;
-    item.appendChild(svg);
+  const kw = String(keyword || '').trim().toLowerCase();
+  const list = COMPONENTS.filter((c) => {
+    if (!kw) return true;
+    return c.label.toLowerCase().indexOf(kw) >= 0 || c.type.toLowerCase().indexOf(kw) >= 0;
+  });
 
-    const label = document.createElement('span');
-    label.textContent = comp.label;
-    item.appendChild(label);
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-hint lib-empty';
+    empty.style.gridColumn = '1 / -1';
+    empty.style.padding = '10px 4px';
+    empty.textContent = '没有匹配「' + keyword + '」的组件';
+    container.appendChild(empty);
+    return;
+  }
 
-    item.addEventListener('click', () => handlers.addComponent(comp.type));
-    item.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', comp.type);
-      e.dataTransfer.effectAllowed = 'copy';
-    });
-    container.appendChild(item);
+  if (kw) {
+    for (const comp of list) container.appendChild(makeLibItem(comp, handlers));
+    return;
+  }
+
+  for (const cat of CATEGORY_ORDER) {
+    const group = list.filter((c) => (c.category || 'basic') === cat);
+    if (!group.length) continue;
+    const title = document.createElement('div');
+    title.className = 'lib-group-title';
+    title.textContent = CATEGORY_LABELS[cat] || cat;
+    container.appendChild(title);
+    for (const comp of group) container.appendChild(makeLibItem(comp, handlers));
   }
 }

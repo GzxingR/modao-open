@@ -20,6 +20,7 @@ ORDER = [
     "model.js",
     "store.js",
     "contextmenu.js",
+    "resizer.js",
     "nodes.js",
     "canvas.js",
     "library.js",

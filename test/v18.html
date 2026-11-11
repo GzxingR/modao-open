@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>v1.8 test</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>body{margin:0;background:#14171c;}</style>
+</head>
+<body>
+<aside class="left" id="leftBox" style="height:620px;width:210px;display:flex;flex-direction:column;">
+  <div class="pane" id="panePages" style="flex:0 0 28%">
+    <div class="pane-title"><span>页面</span></div>
+    <div id="pageList" class="page-list"></div>
+  </div>
+  <div class="resizer" id="rz1"></div>
+  <div class="pane" id="paneLayers" style="flex:0 0 24%">
+    <div class="pane-title"><span>图层</span></div>
+    <div id="layerList" class="layer-list"></div>
+  </div>
+  <div class="resizer" id="rz2"></div>
+  <div class="pane" id="paneLibrary" style="flex:1 1 auto">
+    <div class="pane-title"><span>组件</span></div>
+    <div id="library" class="library"></div>
+  </div>
+</aside>
+<pre id="out">running…</pre>
+<script type="module" src="./v18.js"></script>
+</body>
+</html>

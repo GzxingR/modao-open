@@ -158,7 +158,7 @@ body {
 }
 .mini:hover { color: var(--text); border-color: #3f4756; }
 
-.page-list { padding: 0 8px 8px; max-height: 34%; overflow: auto; }
+.page-list { padding: 0 8px 8px; overflow: auto; }
 
 .page-item {
   display: flex;
@@ -197,7 +197,47 @@ body {
 .lib-item:hover { border-color: var(--accent); color: var(--text); }
 .lib-item svg { opacity: .9; }
 
-.layer-list { max-height: 26%; overflow: auto; padding: 0 6px 8px; }
+.layer-list { overflow: auto; padding: 0 6px 8px; }
+
+/* 左栏三块面板：可拖拽分隔 */
+.pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.pane .pane-title { flex: 0 0 auto; }
+.pane .page-list, .pane .layer-list, .pane .library { flex: 1 1 auto; min-height: 0; }
+.resizer {
+  flex: 0 0 6px;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+}
+.resizer:hover { background: #2c323d; }
+.resizer::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 2px;
+  height: 1px;
+  background: var(--line);
+}
+.lib-search-wrap { padding: 0 8px 6px; flex: 0 0 auto; }
+.lib-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.lib-search:focus { border-color: var(--accent); }
+.lib-group-title {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: .05em;
+  margin: 6px 0 1px;
+  padding-left: 2px;
+}
 
 .layer-item {
   display: flex;
