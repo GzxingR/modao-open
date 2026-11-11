@@ -899,6 +899,7 @@ const ACTIONS = [
   { value: 'scrollTo', label: '滚动到目标' },
   { value: 'openOverlay', label: '打开浮层' },
   { value: 'closeOverlay', label: '关闭浮层' },
+  { value: 'setVar', label: '设置变量值' },
   { value: 'url', label: '打开链接' }
 ];
 
@@ -1156,6 +1157,22 @@ function createPage(name, deviceId = 'iphone17') {
   };
 }
 
+/** 条件运算符 */
+const CONDITION_OPS = [
+  { value: 'eq', label: '等于' },
+  { value: 'neq', label: '不等于' },
+  { value: 'truthy', label: '为真' },
+  { value: 'falsy', label: '为假' }
+];
+
+function createVariable(name, value) {
+  return {
+    id: uid('v'),
+    name: name || 'var' + Math.floor(Math.random() * 1000),
+    value: value == null ? '' : String(value)
+  };
+}
+
 function createProject(name = '未命名原型') {
   const page = createPage('首页');
   return {
@@ -1163,6 +1180,7 @@ function createProject(name = '未命名原型') {
     name,
     pages: [page],
     activePageId: page.id,
+    variables: [],
     createdAt: new Date().toISOString()
   };
 }
@@ -1195,6 +1213,11 @@ function normalizeProject(raw) {
     name: raw.name || '未命名原型',
     pages,
     activePageId: pages.some((p) => p.id === raw.activePageId) ? raw.activePageId : pages[0].id,
+    variables: Array.isArray(raw.variables) ? raw.variables.map((v) => ({
+      id: v.id || uid('v'),
+      name: String(v.name == null ? 'var' : v.name),
+      value: v.value == null ? '' : String(v.value)
+    })) : [],
     createdAt: raw.createdAt || new Date().toISOString()
   };
 }
@@ -1737,6 +1760,37 @@ class Store {
 
   setProjectName(name) {
     this.mutate((project) => { project.name = name; }, { reason: 'meta' });
+  }
+
+  /* ---------- 变量 ---------- */
+  ensureVariables() {
+    if (!Array.isArray(this.project.variables)) this.project.variables = [];
+    return this.project.variables;
+  }
+
+  addVariable(name, value) {
+    const v = { id: uid('v'), name: name || ('var' + (this.ensureVariables().length + 1)), value: value == null ? '' : String(value) };
+    this.mutate(() => { this.ensureVariables().push(v); }, { reason: 'vars' });
+    return v;
+  }
+
+  updateVariable(id, patch) {
+    const v = this.ensureVariables().find((x) => x.id === id);
+    if (!v) return;
+    this.mutate(() => {
+      if (patch.name != null) v.name = String(patch.name);
+      if (patch.value != null) v.value = String(patch.value);
+    }, { reason: 'vars' });
+  }
+
+  removeVariable(id) {
+    this.mutate(() => {
+      this.project.variables = this.ensureVariables().filter((x) => x.id !== id);
+    }, { reason: 'vars' });
+  }
+
+  variableById(id) {
+    return this.ensureVariables().find((x) => x.id === id) || null;
   }
 
   setPageBg(color) {
@@ -3216,6 +3270,42 @@ function renderInspector(container, store, handlers) {
 
     container.appendChild(group('页面', pageRows));
 
+    /* 变量（项目级） */
+    const varRows = [];
+    const vars = store.project.variables || [];
+    if (!vars.length) {
+      varRows.push(el('div', {
+        class: 'empty-hint',
+        text: '还没有变量。变量可以被交互赋值，也能用「条件」控制某个行为是否执行。'
+      }));
+    }
+    for (const v of vars) {
+      const row = el('div', { class: 'row' });
+      const nameWrap = el('div', { class: 'field', style: { flex: '1' } });
+      const nameInput = el('input', { type: 'text', value: v.name });
+      nameInput.addEventListener('change', () => store.updateVariable(v.id, { name: nameInput.value.trim() || v.name }));
+      nameWrap.appendChild(nameInput);
+      row.appendChild(nameWrap);
+
+      const valWrap = el('div', { class: 'field', style: { flex: '1' } });
+      const valInput = el('input', { type: 'text', value: v.value });
+      valInput.addEventListener('change', () => store.updateVariable(v.id, { value: valInput.value }));
+      valWrap.appendChild(valInput);
+      row.appendChild(valWrap);
+
+      const delBtn = el('button', { class: 'mini', text: '✕', title: '删除变量' });
+      delBtn.addEventListener('click', () => store.removeVariable(v.id));
+      row.appendChild(delBtn);
+      varRows.push(row);
+    }
+    const addVarBtn = el('button', { class: 'tb', text: '＋ 添加变量' });
+    addVarBtn.style.width = '100%';
+    addVarBtn.addEventListener('click', () => {
+      store.addVariable('var' + ((store.project.variables || []).length + 1), '');
+    });
+    varRows.push(el('div', { class: 'row' }, [addVarBtn]));
+    container.appendChild(group('变量（项目级）', varRows));
+
     container.appendChild(group('选中说明', [
       el('div', { class: 'empty-hint' }, [
         '点画布里的元素来改属性。',
@@ -3455,6 +3545,55 @@ function renderInspector(container, store, handlers) {
 
   const keep = () => Object.assign({ trigger: currentTrigger }, node.link || {});
 
+  /* 条件（可选）：不满足则整个行为不执行 */
+  const projectVars = store.project.variables || [];
+  const condVarSelect = el('select');
+  condVarSelect.appendChild(el('option', { value: '', text: '无条件（总是执行）' }));
+  for (const v of projectVars) {
+    const o = el('option', { value: v.name, text: v.name });
+    if (node.link && node.link.condition && node.link.condition.varName === v.name) o.selected = true;
+    condVarSelect.appendChild(o);
+  }
+  condVarSelect.disabled = currentAction === 'none';
+  condVarSelect.addEventListener('change', () => {
+    const vn = condVarSelect.value;
+    const next = Object.assign({}, node.link || { action: 'navigate' });
+    if (!vn) delete next.condition;
+    else next.condition = { varName: vn, op: 'truthy', value: '' };
+    handlers.update(node.id, { link: next });
+  });
+  linkRows.push(el('div', { class: 'row' }, [
+    el('span', { class: 'group-title', text: '条件', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
+    condVarSelect
+  ]));
+
+  const cond = node.link && node.link.condition;
+  if (cond && cond.varName) {
+    const opSelect = el('select');
+    for (const op of CONDITION_OPS) {
+      const o = el('option', { value: op.value, text: op.label });
+      if (op.value === (cond.op || 'truthy')) o.selected = true;
+      opSelect.appendChild(o);
+    }
+    opSelect.addEventListener('change', () => {
+      const next = Object.assign({}, node.link);
+      next.condition = Object.assign({}, cond, { op: opSelect.value });
+      handlers.update(node.id, { link: next });
+    });
+    linkRows.push(el('div', { class: 'row' }, [opSelect]));
+
+    if (cond.op === 'eq' || cond.op === 'neq') {
+      const condValInput = el('input', { type: 'text', value: cond.value || '' });
+      condValInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+      condValInput.addEventListener('change', () => {
+        const next = Object.assign({}, node.link);
+        next.condition = Object.assign({}, cond, { value: condValInput.value });
+        handlers.update(node.id, { link: next });
+      });
+      linkRows.push(el('div', { class: 'row' }, [condValInput]));
+    }
+  }
+
   if (currentAction === 'navigate') {
     if (!pages.length) {
       linkRows.push(el('div', { class: 'empty-hint', text: '还没有其他页面，先新建一个页面。' }));
@@ -3533,6 +3672,32 @@ function renderInspector(container, store, handlers) {
       });
       linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
     }
+  } else if (currentAction === 'setVar') {
+    if (!projectVars.length) {
+      linkRows.push(el('div', { class: 'empty-hint', text: '先在上面的「变量」面板里加一个变量。' }));
+    } else {
+      const varSelect = el('select');
+      for (const v of projectVars) {
+        const o = el('option', { value: v.name, text: v.name });
+        if (node.link && node.link.varName === v.name) o.selected = true;
+        varSelect.appendChild(o);
+      }
+      const varValInput = el('input', { type: 'text', value: (node.link && node.link.varValue) || '' });
+      varValInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+      varValInput.placeholder = '要赋的值';
+
+      const applyVar = () => {
+        handlers.update(node.id, {
+          link: Object.assign(keep(), { action: 'setVar', varName: varSelect.value, varValue: varValInput.value })
+        });
+      };
+      varSelect.addEventListener('change', applyVar);
+      varValInput.addEventListener('change', applyVar);
+
+      linkRows.push(el('div', { class: 'row' }, [varSelect]));
+      linkRows.push(el('div', { class: 'row' }, [varValInput]));
+      linkRows.push(el('div', { class: 'empty-hint', text: '预览时触发就把它设成这个值，后面的行为可以用条件读它。' }));
+    }
   } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle' || currentAction === 'scrollTo') {
     const nodeSelect = el('select');
     const candidates = store.page.nodes.filter((n) => n.id !== node.id);
@@ -3560,6 +3725,10 @@ function renderInspector(container, store, handlers) {
     else if (v === 'openOverlay' || v === 'closeOverlay') {
       const ov = store.page.nodes.filter((n) => n.type === 'group' && n.overlay)[0];
       next.targetNodeId = ov ? ov.id : null;
+    } else if (v === 'setVar') {
+      const fv = (store.project.variables || [])[0];
+      next.varName = fv ? fv.name : '';
+      next.varValue = '';
     } else {
       const target = store.page.nodes.filter((n) => n.id !== node.id)[0];
       next.targetNodeId = target ? target.id : null;
@@ -3867,6 +4036,21 @@ function renderLinks(layer, store) {
 function createPreviewRuntime(project, startPageId, mount) {
   let currentPageId = startPageId;
   const hiddenState = new Map();
+  const vars = new Map();
+  for (const v of (project.variables || [])) {
+    vars.set(v.name, String(v.value == null ? '' : v.value));
+  }
+
+  function checkCondition(link) {
+    const c = link.condition;
+    if (!c || !c.varName) return true;
+    const actual = vars.has(c.varName) ? vars.get(c.varName) : '';
+    const expect = c.value == null ? '' : String(c.value);
+    if (c.op === 'truthy') return actual !== '' && actual !== '0' && actual !== 'false';
+    if (c.op === 'falsy') return actual === '' || actual === '0' || actual === 'false';
+    if (c.op === 'neq') return actual !== expect;
+    return actual === expect;
+  }
 
   function pageById(id) {
     return project.pages.find((p) => p.id === id) || project.pages[0];
@@ -3900,6 +4084,7 @@ function createPreviewRuntime(project, startPageId, mount) {
     function runAction(node) {
       const link = node.link;
       if (!link || !link.action || link.action === 'none') return;
+      if (!checkCondition(link)) return;
 
       if (link.action === 'navigate') {
         if (link.targetPageId && link.targetPageId !== page.id) {
@@ -3912,6 +4097,11 @@ function createPreviewRuntime(project, startPageId, mount) {
 
       if (link.action === 'url') {
         if (link.url) window.open(link.url, '_blank', 'noopener');
+        return;
+      }
+
+      if (link.action === 'setVar') {
+        if (link.varName) vars.set(link.varName, link.varValue == null ? '' : String(link.varValue));
         return;
       }
 
@@ -4015,9 +4205,14 @@ function createPreviewRuntime(project, startPageId, mount) {
     restart() {
       currentPageId = startPageId;
       hiddenState.clear();
+      for (const v of (project.variables || [])) {
+        vars.set(v.name, String(v.value == null ? '' : v.value));
+      }
       render();
     },
-    currentPage() { return pageById(currentPageId); }
+    currentPage() { return pageById(currentPageId); },
+    getVar(name) { return vars.has(name) ? vars.get(name) : undefined; },
+    setVar(name, value) { vars.set(name, String(value == null ? '' : value)); }
   };
 }
 
@@ -4327,6 +4522,15 @@ function nodeHtml(node, overrideStateId) {
     if (node.defaultOpen) el.dataset.ovd = '1';
     el.style.zIndex = '901';
   }
+  if (link && link.condition && link.condition.varName) {
+    el.dataset.cv = link.condition.varName;
+    el.dataset.co = link.condition.op || 'truthy';
+    if (link.condition.value != null) el.dataset.cval = String(link.condition.value);
+  }
+  if (link && link.varName) {
+    el.dataset.vn = link.varName;
+    el.dataset.vv = link.varValue == null ? '' : String(link.varValue);
+  }
   return el.outerHTML;
 }
 
@@ -4446,8 +4650,28 @@ const RUNTIME = `
     }
   }
 
+  var vars = {};
+  (D.variables || []).forEach(function (v) { vars[v.name] = String(v.value == null ? '' : v.value); });
+
+  function checkCond(el) {
+    var vn = el.dataset.cv;
+    if (!vn) return true;
+    var actual = Object.prototype.hasOwnProperty.call(vars, vn) ? vars[vn] : '';
+    var op = el.dataset.co || 'truthy';
+    var expect = el.dataset.cval == null ? '' : el.dataset.cval;
+    if (op === 'truthy') return actual !== '' && actual !== '0' && actual !== 'false';
+    if (op === 'falsy') return actual === '' || actual === '0' || actual === 'false';
+    if (op === 'neq') return actual !== expect;
+    return actual === expect;
+  }
+
   function run(el, box, p) {
     var act = el.dataset.la;
+    if (!checkCond(el)) return;
+    if (act === 'setVar') {
+      if (el.dataset.vn) vars[el.dataset.vn] = (el.dataset.vv == null ? '' : el.dataset.vv);
+      return;
+    }
     if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
     if (act === 'url' && el.dataset.lu) { window.open(el.dataset.lu, '_blank', 'noopener'); return; }
 
@@ -4525,6 +4749,7 @@ function buildStandaloneHtml(project) {
   const data = {
     name: project.name || '原型',
     startPageId: project.activePageId || (pages[0] && pages[0].id),
+    variables: (project.variables || []).map((v) => ({ name: v.name, value: v.value })),
     pages
   };
 

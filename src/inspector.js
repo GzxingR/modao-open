@@ -2,7 +2,7 @@
  * 右侧属性面板
  */
 
-import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice, TRIGGERS, ACTIONS } from './model.js';
+import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice, TRIGGERS, ACTIONS, CONDITION_OPS } from './model.js';
 import { compressImageFile } from './io.js';
 
 function el(tag, props = {}, children = []) {
@@ -168,6 +168,42 @@ export function renderInspector(container, store, handlers) {
     pageRows.push(el('div', { class: 'row' }, [colorField('背景', store.page.bg || '#ffffff', (v) => store.setPageBg(v))]));
 
     container.appendChild(group('页面', pageRows));
+
+    /* 变量（项目级） */
+    const varRows = [];
+    const vars = store.project.variables || [];
+    if (!vars.length) {
+      varRows.push(el('div', {
+        class: 'empty-hint',
+        text: '还没有变量。变量可以被交互赋值，也能用「条件」控制某个行为是否执行。'
+      }));
+    }
+    for (const v of vars) {
+      const row = el('div', { class: 'row' });
+      const nameWrap = el('div', { class: 'field', style: { flex: '1' } });
+      const nameInput = el('input', { type: 'text', value: v.name });
+      nameInput.addEventListener('change', () => store.updateVariable(v.id, { name: nameInput.value.trim() || v.name }));
+      nameWrap.appendChild(nameInput);
+      row.appendChild(nameWrap);
+
+      const valWrap = el('div', { class: 'field', style: { flex: '1' } });
+      const valInput = el('input', { type: 'text', value: v.value });
+      valInput.addEventListener('change', () => store.updateVariable(v.id, { value: valInput.value }));
+      valWrap.appendChild(valInput);
+      row.appendChild(valWrap);
+
+      const delBtn = el('button', { class: 'mini', text: '✕', title: '删除变量' });
+      delBtn.addEventListener('click', () => store.removeVariable(v.id));
+      row.appendChild(delBtn);
+      varRows.push(row);
+    }
+    const addVarBtn = el('button', { class: 'tb', text: '＋ 添加变量' });
+    addVarBtn.style.width = '100%';
+    addVarBtn.addEventListener('click', () => {
+      store.addVariable('var' + ((store.project.variables || []).length + 1), '');
+    });
+    varRows.push(el('div', { class: 'row' }, [addVarBtn]));
+    container.appendChild(group('变量（项目级）', varRows));
 
     container.appendChild(group('选中说明', [
       el('div', { class: 'empty-hint' }, [
@@ -408,6 +444,55 @@ export function renderInspector(container, store, handlers) {
 
   const keep = () => Object.assign({ trigger: currentTrigger }, node.link || {});
 
+  /* 条件（可选）：不满足则整个行为不执行 */
+  const projectVars = store.project.variables || [];
+  const condVarSelect = el('select');
+  condVarSelect.appendChild(el('option', { value: '', text: '无条件（总是执行）' }));
+  for (const v of projectVars) {
+    const o = el('option', { value: v.name, text: v.name });
+    if (node.link && node.link.condition && node.link.condition.varName === v.name) o.selected = true;
+    condVarSelect.appendChild(o);
+  }
+  condVarSelect.disabled = currentAction === 'none';
+  condVarSelect.addEventListener('change', () => {
+    const vn = condVarSelect.value;
+    const next = Object.assign({}, node.link || { action: 'navigate' });
+    if (!vn) delete next.condition;
+    else next.condition = { varName: vn, op: 'truthy', value: '' };
+    handlers.update(node.id, { link: next });
+  });
+  linkRows.push(el('div', { class: 'row' }, [
+    el('span', { class: 'group-title', text: '条件', style: { margin: '0 4px 0 0', fontSize: '11px' } }),
+    condVarSelect
+  ]));
+
+  const cond = node.link && node.link.condition;
+  if (cond && cond.varName) {
+    const opSelect = el('select');
+    for (const op of CONDITION_OPS) {
+      const o = el('option', { value: op.value, text: op.label });
+      if (op.value === (cond.op || 'truthy')) o.selected = true;
+      opSelect.appendChild(o);
+    }
+    opSelect.addEventListener('change', () => {
+      const next = Object.assign({}, node.link);
+      next.condition = Object.assign({}, cond, { op: opSelect.value });
+      handlers.update(node.id, { link: next });
+    });
+    linkRows.push(el('div', { class: 'row' }, [opSelect]));
+
+    if (cond.op === 'eq' || cond.op === 'neq') {
+      const condValInput = el('input', { type: 'text', value: cond.value || '' });
+      condValInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+      condValInput.addEventListener('change', () => {
+        const next = Object.assign({}, node.link);
+        next.condition = Object.assign({}, cond, { value: condValInput.value });
+        handlers.update(node.id, { link: next });
+      });
+      linkRows.push(el('div', { class: 'row' }, [condValInput]));
+    }
+  }
+
   if (currentAction === 'navigate') {
     if (!pages.length) {
       linkRows.push(el('div', { class: 'empty-hint', text: '还没有其他页面，先新建一个页面。' }));
@@ -486,6 +571,32 @@ export function renderInspector(container, store, handlers) {
       });
       linkRows.push(el('div', { class: 'row' }, [nodeSelect]));
     }
+  } else if (currentAction === 'setVar') {
+    if (!projectVars.length) {
+      linkRows.push(el('div', { class: 'empty-hint', text: '先在上面的「变量」面板里加一个变量。' }));
+    } else {
+      const varSelect = el('select');
+      for (const v of projectVars) {
+        const o = el('option', { value: v.name, text: v.name });
+        if (node.link && node.link.varName === v.name) o.selected = true;
+        varSelect.appendChild(o);
+      }
+      const varValInput = el('input', { type: 'text', value: (node.link && node.link.varValue) || '' });
+      varValInput.style.cssText = 'flex:1;background:var(--bg-input);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-size:12px;';
+      varValInput.placeholder = '要赋的值';
+
+      const applyVar = () => {
+        handlers.update(node.id, {
+          link: Object.assign(keep(), { action: 'setVar', varName: varSelect.value, varValue: varValInput.value })
+        });
+      };
+      varSelect.addEventListener('change', applyVar);
+      varValInput.addEventListener('change', applyVar);
+
+      linkRows.push(el('div', { class: 'row' }, [varSelect]));
+      linkRows.push(el('div', { class: 'row' }, [varValInput]));
+      linkRows.push(el('div', { class: 'empty-hint', text: '预览时触发就把它设成这个值，后面的行为可以用条件读它。' }));
+    }
   } else if (currentAction === 'show' || currentAction === 'hide' || currentAction === 'toggle' || currentAction === 'scrollTo') {
     const nodeSelect = el('select');
     const candidates = store.page.nodes.filter((n) => n.id !== node.id);
@@ -513,6 +624,10 @@ export function renderInspector(container, store, handlers) {
     else if (v === 'openOverlay' || v === 'closeOverlay') {
       const ov = store.page.nodes.filter((n) => n.type === 'group' && n.overlay)[0];
       next.targetNodeId = ov ? ov.id : null;
+    } else if (v === 'setVar') {
+      const fv = (store.project.variables || [])[0];
+      next.varName = fv ? fv.name : '';
+      next.varValue = '';
     } else {
       const target = store.page.nodes.filter((n) => n.id !== node.id)[0];
       next.targetNodeId = target ? target.id : null;

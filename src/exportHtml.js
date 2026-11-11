@@ -35,6 +35,15 @@ function nodeHtml(node, overrideStateId) {
     if (node.defaultOpen) el.dataset.ovd = '1';
     el.style.zIndex = '901';
   }
+  if (link && link.condition && link.condition.varName) {
+    el.dataset.cv = link.condition.varName;
+    el.dataset.co = link.condition.op || 'truthy';
+    if (link.condition.value != null) el.dataset.cval = String(link.condition.value);
+  }
+  if (link && link.varName) {
+    el.dataset.vn = link.varName;
+    el.dataset.vv = link.varValue == null ? '' : String(link.varValue);
+  }
   return el.outerHTML;
 }
 
@@ -154,8 +163,28 @@ const RUNTIME = `
     }
   }
 
+  var vars = {};
+  (D.variables || []).forEach(function (v) { vars[v.name] = String(v.value == null ? '' : v.value); });
+
+  function checkCond(el) {
+    var vn = el.dataset.cv;
+    if (!vn) return true;
+    var actual = Object.prototype.hasOwnProperty.call(vars, vn) ? vars[vn] : '';
+    var op = el.dataset.co || 'truthy';
+    var expect = el.dataset.cval == null ? '' : el.dataset.cval;
+    if (op === 'truthy') return actual !== '' && actual !== '0' && actual !== 'false';
+    if (op === 'falsy') return actual === '' || actual === '0' || actual === 'false';
+    if (op === 'neq') return actual !== expect;
+    return actual === expect;
+  }
+
   function run(el, box, p) {
     var act = el.dataset.la;
+    if (!checkCond(el)) return;
+    if (act === 'setVar') {
+      if (el.dataset.vn) vars[el.dataset.vn] = (el.dataset.vv == null ? '' : el.dataset.vv);
+      return;
+    }
     if (act === 'navigate' && el.dataset.lp) { show(el.dataset.lp); return; }
     if (act === 'url' && el.dataset.lu) { window.open(el.dataset.lu, '_blank', 'noopener'); return; }
 
@@ -233,6 +262,7 @@ export function buildStandaloneHtml(project) {
   const data = {
     name: project.name || '原型',
     startPageId: project.activePageId || (pages[0] && pages[0].id),
+    variables: (project.variables || []).map((v) => ({ name: v.name, value: v.value })),
     pages
   };
 
