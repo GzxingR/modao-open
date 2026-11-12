@@ -27,6 +27,7 @@ ORDER = [
     "keys.js",
     "templates.js",
     "flowchart.js",
+    "snapshots.js",
     "nodes.js",
     "canvas.js",
     "library.js",

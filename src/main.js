@@ -19,6 +19,7 @@ import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
 import { renderHelpContent } from './help.js';
 import { TEMPLATES, buildTemplate } from './templates.js';
 import { buildFlowSvg, describeFlow } from './flowchart.js';
+import { listSnapshots, saveSnapshot, getSnapshot, deleteSnapshot, snapshotsBytes, formatBytes, formatTime, MAX_SNAPSHOTS } from './snapshots.js';
 import { loadViewState, saveViewState, captureViewState, applyViewState, restoreScroll } from './viewstate.js';
 
 const APP_VERSION = '2.4.0';
@@ -314,6 +315,10 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
     openFlow();
     return;
   }
+  if (act === 'snapshots') {
+    openSnapshots();
+    return;
+  }
 });
 
 /** 载入课程作业四页示例 */
@@ -539,6 +544,94 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 版本快照 ---------------- */
+function openSnapshots() {
+  function renderBody() {
+    const wrap = document.createElement('div');
+    const list = listSnapshots();
+
+    const desc = document.createElement('div');
+    desc.className = 'hint';
+    desc.textContent = list.length
+      ? ('共 ' + list.length + ' 个版本，占 ' + formatBytes(snapshotsBytes()) + '（最多保留 ' + MAX_SNAPSHOTS + ' 个）')
+      : '还没有版本。存一份之后，改崩了可以随时回到这一刻。';
+    wrap.appendChild(desc);
+
+    const bar = document.createElement('div');
+    bar.className = 'row';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'tb';
+    saveBtn.textContent = '＋ 存一个版本';
+    saveBtn.style.flex = '1';
+    saveBtn.addEventListener('click', () => {
+      const name = prompt('版本名称', '第 ' + (listSnapshots().length + 1) + ' 版');
+      if (name === null) return;
+      const r = saveSnapshot(store.project, name);
+      if (!r.ok) { toast('保存失败：' + r.error); return; }
+      toast('已保存「' + r.snapshot.name + '」' + (r.dropped ? '，清理了 ' + r.dropped + ' 个旧版本' : ''));
+      refresh();
+    });
+    bar.appendChild(saveBtn);
+    wrap.appendChild(bar);
+
+    const listBox = document.createElement('div');
+    listBox.className = 'snap-list';
+    for (const s of list) {
+      const row = document.createElement('div');
+      row.className = 'snap-row';
+
+      const info = document.createElement('div');
+      info.className = 'snap-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'snap-name';
+      nameEl.textContent = s.name;
+      const metaEl = document.createElement('div');
+      metaEl.className = 'snap-meta';
+      metaEl.textContent = formatTime(s.at) + ' · ' + s.pages + ' 页 ' + s.nodes + ' 元素 · ' + formatBytes(s.bytes);
+      info.appendChild(nameEl);
+      info.appendChild(metaEl);
+      row.appendChild(info);
+
+      const restoreBtn = document.createElement('button');
+      restoreBtn.className = 'tb';
+      restoreBtn.textContent = '恢复';
+      restoreBtn.addEventListener('click', () => {
+        saveSnapshot(store.project, '恢复前自动备份');
+        const snap = getSnapshot(s.id);
+        if (!snap) { toast('这个版本已经不在了'); return; }
+        store.loadProject(snap.project);
+        closeModal();
+        toast('已恢复到「' + s.name + '」；恢复前的状态也留了一份');
+      });
+      row.appendChild(restoreBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'mini';
+      delBtn.textContent = '✕';
+      delBtn.title = '删除这个版本';
+      delBtn.addEventListener('click', () => {
+        deleteSnapshot(s.id);
+        refresh();
+      });
+      row.appendChild(delBtn);
+
+      listBox.appendChild(row);
+    }
+    wrap.appendChild(listBox);
+    return wrap;
+  }
+
+  function refresh() {
+    openModal('版本快照', renderBody, () => {
+      const box = document.createElement('div');
+      box.appendChild(btn('关闭', () => closeModal()));
+      return box;
+    });
+  }
+
+  refresh();
+}
 
 /* ---------------- 交互跳转总览 ---------------- */
 function openFlow() {
@@ -956,6 +1049,9 @@ function boot() {
   }
   if (/[?&]flow=1/.test(location.search)) {
     setTimeout(openFlow, 100);
+  }
+  if (/[?&]snapshots=1/.test(location.search)) {
+    setTimeout(openSnapshots, 120);
   }
 
   requestAnimationFrame(() => {

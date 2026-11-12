@@ -712,6 +712,28 @@ textarea.full {
 }
 .lib-item.my-comp:hover .comp-del { opacity: 0.8; }
 
+/* ---------- 版本快照 ---------- */
+.snap-list {
+  margin-top: 10px;
+  max-height: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.snap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.snap-info { flex: 1; min-width: 0; }
+.snap-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.snap-meta { font-size: 11px; color: var(--text-dim); }
+
 /* ---------- 交互跳转总览 ---------- */
 .flow-svg {
   display: block;
@@ -965,6 +987,7 @@ button:focus:not(:focus-visible) { outline: none; }
       <button class="tb" data-act="preset" title="载入课程作业四页示例">作业示例</button>
       <button class="tb" data-act="templates" title="页面模板库：一键新建常见页面">模板</button>
       <button class="tb" data-act="flow" title="交互跳转总览：看页面之间怎么连">流程</button>
+      <button class="tb" data-act="snapshots" title="版本快照：本地存多份历史，可回滚">版本</button>
       <button class="tb ai" data-act="ai" title="AI 生成（自带 API Key）">AI 生成</button>
       <button class="tb" data-act="preview" title="预览演示">预览</button>
       <button class="tb" data-act="spec" title="生成规格清单">规格</button>
@@ -3231,6 +3254,132 @@ function describeFlow(project) {
   if (!m.nodes.length) return '还没有页面';
   if (!m.edges.length) return m.nodes.length + ' 个页面，但还没有任何跳转。给按钮加「跳转页面」就能在这里看到连线。';
   return m.nodes.length + ' 个页面 / ' + m.edges.length + ' 条跳转';
+}
+
+/* ===== src/snapshots.js ===== */
+/**
+ * 本地版本快照：把整个项目存成一份带名字的历史，随时可以回滚。
+ * 存在独立的 localStorage key 里，和当前项目互不影响。
+ */
+
+const KEY = 'modao-open:snapshots';
+const MAX_SNAPSHOTS = 10;
+
+function readAll() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writeAll(list) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(list));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 列表（新的在前），不带 project 主体，避免把整份数据读进内存 */
+function listSnapshots() {
+  return readAll().map((s) => ({
+    id: s.id,
+    name: s.name,
+    at: s.at,
+    bytes: s.bytes,
+    pages: s.pages,
+    nodes: s.nodes
+  }));
+}
+
+function getSnapshot(id) {
+  return readAll().find((s) => s.id === id) || null;
+}
+
+function countProject(project) {
+  const pages = (project && project.pages) || [];
+  let nodes = 0;
+  for (const p of pages) nodes += (p.nodes || []).length;
+  return { pages: pages.length, nodes };
+}
+
+/**
+ * 存一份快照。返回 { ok, snapshot?, error?, dropped? }
+ */
+function saveSnapshot(project, name) {
+  if (!project) return { ok: false, error: '没有可保存的项目' };
+  let payload;
+  try {
+    payload = JSON.stringify(project);
+  } catch (e) {
+    return { ok: false, error: '项目无法序列化' };
+  }
+
+  const meta = countProject(project);
+  const snap = {
+    id: 'snap-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+    name: String(name || '').trim() || ('版本 ' + new Date().toLocaleString('zh-CN')),
+    at: Date.now(),
+    bytes: payload.length,
+    pages: meta.pages,
+    nodes: meta.nodes,
+    project: JSON.parse(payload)
+  };
+
+  let list = readAll();
+  list.unshift(snap);
+
+  let dropped = 0;
+  while (list.length > MAX_SNAPSHOTS) {
+    list.pop();
+    dropped += 1;
+  }
+
+  if (!writeAll(list)) {
+    // 空间不够：逐步砍旧版本再试
+    while (list.length > 1) {
+      list.pop();
+      dropped += 1;
+      if (writeAll(list)) {
+        return { ok: true, snapshot: snap, dropped, warning: '存储空间紧张，已丢弃较旧的版本' };
+      }
+    }
+    return { ok: false, error: '本地存储已满，存不下新的版本' };
+  }
+
+  return { ok: true, snapshot: snap, dropped };
+}
+
+function deleteSnapshot(id) {
+  const list = readAll().filter((s) => s.id !== id);
+  return writeAll(list);
+}
+
+function clearSnapshots() {
+  return writeAll([]);
+}
+
+/** 快照总共占了多少字节 */
+function snapshotsBytes() {
+  return readAll().reduce((sum, s) => sum + (s.bytes || 0), 0);
+}
+
+function formatBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return v + ' B';
+  if (v < 1024 * 1024) return (v / 1024).toFixed(1) + ' KB';
+  return (v / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const pad = (x) => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+    + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
 /* ===== src/nodes.js ===== */
@@ -6957,6 +7106,7 @@ function buildAssignmentProject() {
 
 
 
+
 const APP_VERSION = '2.4.0';
 
 
@@ -7250,6 +7400,10 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
     openFlow();
     return;
   }
+  if (act === 'snapshots') {
+    openSnapshots();
+    return;
+  }
 });
 
 /** 载入课程作业四页示例 */
@@ -7475,6 +7629,94 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 版本快照 ---------------- */
+function openSnapshots() {
+  function renderBody() {
+    const wrap = document.createElement('div');
+    const list = listSnapshots();
+
+    const desc = document.createElement('div');
+    desc.className = 'hint';
+    desc.textContent = list.length
+      ? ('共 ' + list.length + ' 个版本，占 ' + formatBytes(snapshotsBytes()) + '（最多保留 ' + MAX_SNAPSHOTS + ' 个）')
+      : '还没有版本。存一份之后，改崩了可以随时回到这一刻。';
+    wrap.appendChild(desc);
+
+    const bar = document.createElement('div');
+    bar.className = 'row';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'tb';
+    saveBtn.textContent = '＋ 存一个版本';
+    saveBtn.style.flex = '1';
+    saveBtn.addEventListener('click', () => {
+      const name = prompt('版本名称', '第 ' + (listSnapshots().length + 1) + ' 版');
+      if (name === null) return;
+      const r = saveSnapshot(store.project, name);
+      if (!r.ok) { toast('保存失败：' + r.error); return; }
+      toast('已保存「' + r.snapshot.name + '」' + (r.dropped ? '，清理了 ' + r.dropped + ' 个旧版本' : ''));
+      refresh();
+    });
+    bar.appendChild(saveBtn);
+    wrap.appendChild(bar);
+
+    const listBox = document.createElement('div');
+    listBox.className = 'snap-list';
+    for (const s of list) {
+      const row = document.createElement('div');
+      row.className = 'snap-row';
+
+      const info = document.createElement('div');
+      info.className = 'snap-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'snap-name';
+      nameEl.textContent = s.name;
+      const metaEl = document.createElement('div');
+      metaEl.className = 'snap-meta';
+      metaEl.textContent = formatTime(s.at) + ' · ' + s.pages + ' 页 ' + s.nodes + ' 元素 · ' + formatBytes(s.bytes);
+      info.appendChild(nameEl);
+      info.appendChild(metaEl);
+      row.appendChild(info);
+
+      const restoreBtn = document.createElement('button');
+      restoreBtn.className = 'tb';
+      restoreBtn.textContent = '恢复';
+      restoreBtn.addEventListener('click', () => {
+        saveSnapshot(store.project, '恢复前自动备份');
+        const snap = getSnapshot(s.id);
+        if (!snap) { toast('这个版本已经不在了'); return; }
+        store.loadProject(snap.project);
+        closeModal();
+        toast('已恢复到「' + s.name + '」；恢复前的状态也留了一份');
+      });
+      row.appendChild(restoreBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'mini';
+      delBtn.textContent = '✕';
+      delBtn.title = '删除这个版本';
+      delBtn.addEventListener('click', () => {
+        deleteSnapshot(s.id);
+        refresh();
+      });
+      row.appendChild(delBtn);
+
+      listBox.appendChild(row);
+    }
+    wrap.appendChild(listBox);
+    return wrap;
+  }
+
+  function refresh() {
+    openModal('版本快照', renderBody, () => {
+      const box = document.createElement('div');
+      box.appendChild(btn('关闭', () => closeModal()));
+      return box;
+    });
+  }
+
+  refresh();
+}
 
 /* ---------------- 交互跳转总览 ---------------- */
 function openFlow() {
@@ -7892,6 +8134,9 @@ function boot() {
   }
   if (/[?&]flow=1/.test(location.search)) {
     setTimeout(openFlow, 100);
+  }
+  if (/[?&]snapshots=1/.test(location.search)) {
+    setTimeout(openSnapshots, 120);
   }
 
   requestAnimationFrame(() => {

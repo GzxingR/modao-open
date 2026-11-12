@@ -705,6 +705,28 @@ textarea.full {
 }
 .lib-item.my-comp:hover .comp-del { opacity: 0.8; }
 
+/* ---------- 版本快照 ---------- */
+.snap-list {
+  margin-top: 10px;
+  max-height: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.snap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.snap-info { flex: 1; min-width: 0; }
+.snap-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.snap-meta { font-size: 11px; color: var(--text-dim); }
+
 /* ---------- 交互跳转总览 ---------- */
 .flow-svg {
   display: block;
