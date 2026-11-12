@@ -17,6 +17,7 @@ import { decideEscape, ariaLabels } from './keys.js';
 import { initResizers } from './resizer.js';
 import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
 import { renderHelpContent } from './help.js';
+import { TEMPLATES, buildTemplate } from './templates.js';
 import { loadViewState, saveViewState, captureViewState, applyViewState, restoreScroll } from './viewstate.js';
 
 const APP_VERSION = '2.4.0';
@@ -296,6 +297,10 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
     loadAssignmentPreset();
     return;
   }
+  if (act === 'templates') {
+    openTemplates();
+    return;
+  }
 });
 
 /** 载入课程作业四页示例 */
@@ -506,6 +511,42 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 页面模板库 ---------------- */
+function applyTemplate(tplId) {
+  const tpl = TEMPLATES.find((t) => t.id === tplId);
+  if (!tpl) return;
+  store.addPage(tpl.name);
+  const n = store.appendNodes(buildTemplate(tplId, store.device));
+  closeModal();
+  toast('已新建「' + tpl.name + '」并放入 ' + n + ' 个元素，直接改就行');
+}
+
+function openTemplates() {
+  openModal('页面模板', () => {
+    const wrap = document.createElement('div');
+    wrap.className = 'tpl-grid';
+    for (const t of TEMPLATES) {
+      const card = document.createElement('button');
+      card.className = 'tpl-card';
+      const name = document.createElement('div');
+      name.className = 'tpl-name';
+      name.textContent = t.name;
+      const desc = document.createElement('div');
+      desc.className = 'tpl-desc';
+      desc.textContent = t.desc;
+      card.appendChild(name);
+      card.appendChild(desc);
+      card.addEventListener('click', () => applyTemplate(t.id));
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }, () => {
+    const box = document.createElement('div');
+    box.appendChild(btn('取消', () => closeModal()));
+    return box;
+  });
+}
 
 /* ---------------- 右键菜单 ---------------- */
 function openCanvasMenu(x, y, nodeId) {
@@ -863,6 +904,9 @@ function boot() {
 
   if (/[?&]help=1/.test(location.search)) {
     setTimeout(openHelp, 60);
+  }
+  if (/[?&]templates=1/.test(location.search)) {
+    setTimeout(openTemplates, 80);
   }
 
   requestAnimationFrame(() => {

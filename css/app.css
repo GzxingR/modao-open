@@ -676,6 +676,26 @@ textarea.full {
   font-size: 11px;
 }
 
+/* ---------- 页面模板库 ---------- */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.tpl-card {
+  text-align: left;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+.tpl-card:hover { border-color: var(--accent); background: var(--bg-panel); }
+.tpl-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.tpl-desc { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+
 /* ---------- 图标选择器 ---------- */
 .icon-picker {
   max-height: 230px;

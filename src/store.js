@@ -521,6 +521,16 @@ export class Store {
     return nodes.length;
   }
 
+  /** 往当前页追加一批节点（模板用），一次进历史 */
+  appendNodes(nodes) {
+    if (!Array.isArray(nodes) || !nodes.length) return 0;
+    this.mutate(() => {
+      for (const n of nodes) this.page.nodes.push(n);
+      this.state.selection = [];
+    }, { reason: 'batch-add' });
+    return nodes.length;
+  }
+
   /** 批量修改选中元素的属性（多选统一改样式用） */
   batchUpdate(patch) {
     const nodes = this.selectedNodes;
