@@ -1975,25 +1975,33 @@ class Store {
     this.mutate(() => { const [n] = list.splice(i, 1); list.unshift(n); }, { reason: 'order' });
   }
 
-  /* ---------- 对齐（基于当前选中，或用画布） ---------- */
+  /* ---------- 对齐（单选相对画布，多选相对选区） ---------- */
   align(kind) {
     const nodes = this.selectedNodes;
-    if (!nodes.length) return;
+    if (!nodes.length) return 0;
     const dev = this.device;
-    const bounds = this.selectionBounds();
+    const multi = nodes.length > 1;
+    const b = multi ? this.selectionBounds() : null;
+
     this.mutate(() => {
       for (const n of nodes) {
-        if (kind === 'left') n.x = 16;
-        else if (kind === 'right') n.x = dev.w - 16 - n.w;
-        else if (kind === 'hcenter') n.x = Math.round((dev.w - n.w) / 2);
-        else if (kind === 'top') n.y = 16;
-        else if (kind === 'bottom') n.y = dev.h - 16 - n.h;
-        else if (kind === 'vcenter') n.y = Math.round((dev.h - n.h) / 2);
-        else if (kind === 'distribute-h' && nodes.length > 1) { /* 下面单独处理 */ }
-        else if (kind === 'distribute-v' && nodes.length > 1) { /* 下面单独处理 */ }
+        if (kind === 'left') {
+          n.x = multi ? b.x : 16;
+        } else if (kind === 'right') {
+          n.x = (multi ? b.x + b.w : dev.w - 16) - n.w;
+        } else if (kind === 'hcenter') {
+          n.x = Math.round((multi ? b.x + b.w / 2 : dev.w / 2) - n.w / 2);
+        } else if (kind === 'top') {
+          n.y = multi ? b.y : 16;
+        } else if (kind === 'bottom') {
+          n.y = (multi ? b.y + b.h : dev.h - 16) - n.h;
+        } else if (kind === 'vcenter') {
+          n.y = Math.round((multi ? b.y + b.h / 2 : dev.h / 2) - n.h / 2);
+        }
       }
+
       if (kind === 'distribute-h' && nodes.length > 1) {
-        const sorted = nodes.slice().sort((a, b) => a.x - b.x);
+        const sorted = nodes.slice().sort((a, c) => a.x - c.x);
         const left = sorted[0].x;
         const right = sorted[sorted.length - 1].x + sorted[sorted.length - 1].w;
         const totalW = sorted.reduce((s, n) => s + n.w, 0);
@@ -2002,7 +2010,7 @@ class Store {
         for (const n of sorted) { n.x = Math.round(cursor); cursor += n.w + gap; }
       }
       if (kind === 'distribute-v' && nodes.length > 1) {
-        const sorted = nodes.slice().sort((a, b) => a.y - b.y);
+        const sorted = nodes.slice().sort((a, c) => a.y - c.y);
         const top = sorted[0].y;
         const bottom = sorted[sorted.length - 1].y + sorted[sorted.length - 1].h;
         const totalH = sorted.reduce((s, n) => s + n.h, 0);
@@ -2010,8 +2018,25 @@ class Store {
         let cursor = top;
         for (const n of sorted) { n.y = Math.round(cursor); cursor += n.h + gap; }
       }
-      void bounds;
     }, { reason: 'align' });
+    return nodes.length;
+  }
+
+  /** 批量修改选中元素的属性（多选统一改样式用） */
+  batchUpdate(patch) {
+    const nodes = this.selectedNodes;
+    if (!nodes.length) return 0;
+    const keys = Object.keys(patch || {}).filter((k) => patch[k] !== undefined);
+    if (!keys.length) return 0;
+    this.mutate(() => {
+      for (const n of nodes) {
+        for (const k of keys) {
+          if (k === 'id' || k === 'type') continue;
+          n[k] = patch[k];
+        }
+      }
+    }, { reason: 'batch' });
+    return nodes.length;
   }
 
   selectionBounds() {
@@ -4655,6 +4680,76 @@ function renderInspector(container, store, handlers) {
     container.appendChild(group('组件状态（动态组件）', stateRows));
   }
 
+  /* ---------- 批量编辑（多选时） ---------- */
+  const selCount = store.state.selection.length;
+  if (selCount >= 2) {
+    const first = store.selectedNodes[0];
+    const batchRows = [];
+    batchRows.push(el('div', {
+      class: 'empty-hint',
+      text: '已选中 ' + selCount + ' 个元素，下面的改动会一次应用到全部。'
+    }));
+    batchRows.push(el('div', { class: 'row' }, [
+      colorField('填充', first.bg || '#ffffff', (v) => store.batchUpdate({ bg: v }))
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      numField('圆角', first.radius || 0, (v) => store.batchUpdate({ radius: v }), { min: 0 })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      numField('透明度', Math.round((first.opacity == null ? 1 : first.opacity) * 100), (v) => store.batchUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 }), { min: 0, max: 100 })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      colorField('文字色', first.color || '#333333', (v) => store.batchUpdate({ color: v }))
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      numField('字号', first.fontSize || 16, (v) => store.batchUpdate({ fontSize: v }), { min: 8, max: 80 })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      el('button', {
+        class: 'tb',
+        text: '统一宽高',
+        style: { flex: '1' },
+        onclick: () => {
+          const w = first.w;
+          const h = first.h;
+          const n = store.batchUpdate({ w, h });
+          handlers.toast('已把 ' + n + ' 个元素统一成 ' + Math.round(w) + '×' + Math.round(h));
+        }
+      }),
+      el('button', {
+        class: 'tb',
+        text: '统一文字',
+        style: { flex: '1' },
+        onclick: () => {
+          const text = first.text || '';
+          const n = store.batchUpdate({ text });
+          handlers.toast('已把 ' + n + ' 个元素的文字统一');
+        }
+      })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      el('button', {
+        class: 'tb',
+        text: '锁定选中',
+        style: { flex: '1' },
+        onclick: () => {
+          const n = store.batchUpdate({ locked: true });
+          handlers.toast('已锁定 ' + n + ' 个元素');
+        }
+      }),
+      el('button', {
+        class: 'tb',
+        text: '解锁选中',
+        style: { flex: '1' },
+        onclick: () => {
+          const n = store.batchUpdate({ locked: false });
+          handlers.toast('已解锁 ' + n + ' 个元素');
+        }
+      })
+    ]));
+    container.appendChild(group('批量编辑（' + selCount + ' 个）', batchRows));
+  }
+
   /* ---------- 排列 ---------- */
   const selIsGroup = node.type === 'group';
   container.appendChild(group('排列', [
@@ -4683,8 +4778,18 @@ function renderInspector(container, store, handlers) {
       el('button', { class: 'tb', text: '置底', style: { flex: '1' }, onclick: () => handlers.sendToBack(node.id) })
     ]),
     el('div', { class: 'row' }, [
+      el('button', { class: 'tb', text: '左对齐', style: { flex: '1' }, onclick: () => handlers.align('left') }),
       el('button', { class: 'tb', text: '水平居中', style: { flex: '1' }, onclick: () => handlers.align('hcenter') }),
-      el('button', { class: 'tb', text: '垂直居中', style: { flex: '1' }, onclick: () => handlers.align('vcenter') })
+      el('button', { class: 'tb', text: '右对齐', style: { flex: '1' }, onclick: () => handlers.align('right') })
+    ]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'tb', text: '顶对齐', style: { flex: '1' }, onclick: () => handlers.align('top') }),
+      el('button', { class: 'tb', text: '垂直居中', style: { flex: '1' }, onclick: () => handlers.align('vcenter') }),
+      el('button', { class: 'tb', text: '底对齐', style: { flex: '1' }, onclick: () => handlers.align('bottom') })
+    ]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'tb', text: '水平等间距', style: { flex: '1' }, onclick: () => handlers.align('distribute-h') }),
+      el('button', { class: 'tb', text: '垂直等间距', style: { flex: '1' }, onclick: () => handlers.align('distribute-v') })
     ]),
     el('div', { class: 'row' }, [
       el('button', { class: 'tb', text: '复制一份', style: { flex: '1' }, onclick: () => store.duplicateSelected() }),

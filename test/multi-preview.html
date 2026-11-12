@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>multi select preview</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>body{background:#14171c;margin:0;padding:12px;width:300px;}</style>
+</head>
+<body>
+<div id="host"></div>
+<script type="module">
+import { Store } from '../src/store.js';
+import { createProject } from '../src/model.js';
+import { renderInspector } from '../src/inspector.js';
+
+const s = new Store();
+s.state.project = createProject('多选');
+const ids = [
+  s.addNode('rect', { x: 40, y: 60, w: 300, h: 60, bg: '#ffffff', radius: 8 }),
+  s.addNode('rect', { x: 40, y: 140, w: 300, h: 60, bg: '#ffffff', radius: 8 }),
+  s.addNode('button', { x: 40, y: 220, w: 300, h: 48, text: '提交', bg: '#1677ff', radius: 8 })
+].map((n) => n.id);
+s.select(ids);
+
+renderInspector(document.getElementById('host'), s, {
+  update(id, patch) { s.updateNode(id, patch); },
+  toast() {}, align() {},
+  bringForward() {}, sendBackward() {}, bringToFront() {}, sendToBack() {}
+});
+document.title = 'multi ready';
+</script>
+</body>
+</html>

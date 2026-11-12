@@ -820,6 +820,76 @@ export function renderInspector(container, store, handlers) {
     container.appendChild(group('组件状态（动态组件）', stateRows));
   }
 
+  /* ---------- 批量编辑（多选时） ---------- */
+  const selCount = store.state.selection.length;
+  if (selCount >= 2) {
+    const first = store.selectedNodes[0];
+    const batchRows = [];
+    batchRows.push(el('div', {
+      class: 'empty-hint',
+      text: '已选中 ' + selCount + ' 个元素，下面的改动会一次应用到全部。'
+    }));
+    batchRows.push(el('div', { class: 'row' }, [
+      colorField('填充', first.bg || '#ffffff', (v) => store.batchUpdate({ bg: v }))
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      numField('圆角', first.radius || 0, (v) => store.batchUpdate({ radius: v }), { min: 0 })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      numField('透明度', Math.round((first.opacity == null ? 1 : first.opacity) * 100), (v) => store.batchUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 }), { min: 0, max: 100 })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      colorField('文字色', first.color || '#333333', (v) => store.batchUpdate({ color: v }))
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      numField('字号', first.fontSize || 16, (v) => store.batchUpdate({ fontSize: v }), { min: 8, max: 80 })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      el('button', {
+        class: 'tb',
+        text: '统一宽高',
+        style: { flex: '1' },
+        onclick: () => {
+          const w = first.w;
+          const h = first.h;
+          const n = store.batchUpdate({ w, h });
+          handlers.toast('已把 ' + n + ' 个元素统一成 ' + Math.round(w) + '×' + Math.round(h));
+        }
+      }),
+      el('button', {
+        class: 'tb',
+        text: '统一文字',
+        style: { flex: '1' },
+        onclick: () => {
+          const text = first.text || '';
+          const n = store.batchUpdate({ text });
+          handlers.toast('已把 ' + n + ' 个元素的文字统一');
+        }
+      })
+    ]));
+    batchRows.push(el('div', { class: 'row' }, [
+      el('button', {
+        class: 'tb',
+        text: '锁定选中',
+        style: { flex: '1' },
+        onclick: () => {
+          const n = store.batchUpdate({ locked: true });
+          handlers.toast('已锁定 ' + n + ' 个元素');
+        }
+      }),
+      el('button', {
+        class: 'tb',
+        text: '解锁选中',
+        style: { flex: '1' },
+        onclick: () => {
+          const n = store.batchUpdate({ locked: false });
+          handlers.toast('已解锁 ' + n + ' 个元素');
+        }
+      })
+    ]));
+    container.appendChild(group('批量编辑（' + selCount + ' 个）', batchRows));
+  }
+
   /* ---------- 排列 ---------- */
   const selIsGroup = node.type === 'group';
   container.appendChild(group('排列', [
@@ -848,8 +918,18 @@ export function renderInspector(container, store, handlers) {
       el('button', { class: 'tb', text: '置底', style: { flex: '1' }, onclick: () => handlers.sendToBack(node.id) })
     ]),
     el('div', { class: 'row' }, [
+      el('button', { class: 'tb', text: '左对齐', style: { flex: '1' }, onclick: () => handlers.align('left') }),
       el('button', { class: 'tb', text: '水平居中', style: { flex: '1' }, onclick: () => handlers.align('hcenter') }),
-      el('button', { class: 'tb', text: '垂直居中', style: { flex: '1' }, onclick: () => handlers.align('vcenter') })
+      el('button', { class: 'tb', text: '右对齐', style: { flex: '1' }, onclick: () => handlers.align('right') })
+    ]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'tb', text: '顶对齐', style: { flex: '1' }, onclick: () => handlers.align('top') }),
+      el('button', { class: 'tb', text: '垂直居中', style: { flex: '1' }, onclick: () => handlers.align('vcenter') }),
+      el('button', { class: 'tb', text: '底对齐', style: { flex: '1' }, onclick: () => handlers.align('bottom') })
+    ]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'tb', text: '水平等间距', style: { flex: '1' }, onclick: () => handlers.align('distribute-h') }),
+      el('button', { class: 'tb', text: '垂直等间距', style: { flex: '1' }, onclick: () => handlers.align('distribute-v') })
     ]),
     el('div', { class: 'row' }, [
       el('button', { class: 'tb', text: '复制一份', style: { flex: '1' }, onclick: () => store.duplicateSelected() }),

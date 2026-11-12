@@ -474,25 +474,33 @@ export class Store {
     this.mutate(() => { const [n] = list.splice(i, 1); list.unshift(n); }, { reason: 'order' });
   }
 
-  /* ---------- 对齐（基于当前选中，或用画布） ---------- */
+  /* ---------- 对齐（单选相对画布，多选相对选区） ---------- */
   align(kind) {
     const nodes = this.selectedNodes;
-    if (!nodes.length) return;
+    if (!nodes.length) return 0;
     const dev = this.device;
-    const bounds = this.selectionBounds();
+    const multi = nodes.length > 1;
+    const b = multi ? this.selectionBounds() : null;
+
     this.mutate(() => {
       for (const n of nodes) {
-        if (kind === 'left') n.x = 16;
-        else if (kind === 'right') n.x = dev.w - 16 - n.w;
-        else if (kind === 'hcenter') n.x = Math.round((dev.w - n.w) / 2);
-        else if (kind === 'top') n.y = 16;
-        else if (kind === 'bottom') n.y = dev.h - 16 - n.h;
-        else if (kind === 'vcenter') n.y = Math.round((dev.h - n.h) / 2);
-        else if (kind === 'distribute-h' && nodes.length > 1) { /* 下面单独处理 */ }
-        else if (kind === 'distribute-v' && nodes.length > 1) { /* 下面单独处理 */ }
+        if (kind === 'left') {
+          n.x = multi ? b.x : 16;
+        } else if (kind === 'right') {
+          n.x = (multi ? b.x + b.w : dev.w - 16) - n.w;
+        } else if (kind === 'hcenter') {
+          n.x = Math.round((multi ? b.x + b.w / 2 : dev.w / 2) - n.w / 2);
+        } else if (kind === 'top') {
+          n.y = multi ? b.y : 16;
+        } else if (kind === 'bottom') {
+          n.y = (multi ? b.y + b.h : dev.h - 16) - n.h;
+        } else if (kind === 'vcenter') {
+          n.y = Math.round((multi ? b.y + b.h / 2 : dev.h / 2) - n.h / 2);
+        }
       }
+
       if (kind === 'distribute-h' && nodes.length > 1) {
-        const sorted = nodes.slice().sort((a, b) => a.x - b.x);
+        const sorted = nodes.slice().sort((a, c) => a.x - c.x);
         const left = sorted[0].x;
         const right = sorted[sorted.length - 1].x + sorted[sorted.length - 1].w;
         const totalW = sorted.reduce((s, n) => s + n.w, 0);
@@ -501,7 +509,7 @@ export class Store {
         for (const n of sorted) { n.x = Math.round(cursor); cursor += n.w + gap; }
       }
       if (kind === 'distribute-v' && nodes.length > 1) {
-        const sorted = nodes.slice().sort((a, b) => a.y - b.y);
+        const sorted = nodes.slice().sort((a, c) => a.y - c.y);
         const top = sorted[0].y;
         const bottom = sorted[sorted.length - 1].y + sorted[sorted.length - 1].h;
         const totalH = sorted.reduce((s, n) => s + n.h, 0);
@@ -509,8 +517,25 @@ export class Store {
         let cursor = top;
         for (const n of sorted) { n.y = Math.round(cursor); cursor += n.h + gap; }
       }
-      void bounds;
     }, { reason: 'align' });
+    return nodes.length;
+  }
+
+  /** 批量修改选中元素的属性（多选统一改样式用） */
+  batchUpdate(patch) {
+    const nodes = this.selectedNodes;
+    if (!nodes.length) return 0;
+    const keys = Object.keys(patch || {}).filter((k) => patch[k] !== undefined);
+    if (!keys.length) return 0;
+    this.mutate(() => {
+      for (const n of nodes) {
+        for (const k of keys) {
+          if (k === 'id' || k === 'type') continue;
+          n[k] = patch[k];
+        }
+      }
+    }, { reason: 'batch' });
+    return nodes.length;
   }
 
   selectionBounds() {
