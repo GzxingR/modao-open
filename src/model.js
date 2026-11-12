@@ -448,6 +448,7 @@ export function createProject(name = '未命名原型') {
     pages: [page],
     activePageId: page.id,
     variables: [],
+    components: [],
     createdAt: new Date().toISOString()
   };
 }
@@ -484,6 +485,14 @@ export function normalizeProject(raw) {
       id: v.id || uid('v'),
       name: String(v.name == null ? 'var' : v.name),
       value: v.value == null ? '' : String(v.value)
+    })) : [],
+    components: Array.isArray(raw.components) ? raw.components.map((c) => ({
+      id: c.id || uid('c'),
+      name: String(c.name == null ? '组件' : c.name),
+      w: Number(c.w) || 100,
+      h: Number(c.h) || 40,
+      children: Array.isArray(c.children) ? c.children : [],
+      createdAt: c.createdAt || Date.now()
     })) : [],
     createdAt: raw.createdAt || new Date().toISOString()
   };

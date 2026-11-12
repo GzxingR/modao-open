@@ -18,6 +18,7 @@ import { initResizers } from './resizer.js';
 import { applyTheme, cycleTheme, getStoredTheme } from './theme.js';
 import { renderHelpContent } from './help.js';
 import { TEMPLATES, buildTemplate } from './templates.js';
+import { buildFlowSvg, describeFlow } from './flowchart.js';
 import { loadViewState, saveViewState, captureViewState, applyViewState, restoreScroll } from './viewstate.js';
 
 const APP_VERSION = '2.4.0';
@@ -154,6 +155,14 @@ const handlers = {
   bringToFront: (id) => store.bringToFront(id),
   sendToBack: (id) => store.sendToBack(id),
   align: (kind) => store.align(kind),
+  insertComponent(defId) {
+    const node = store.insertComponentInstance(defId);
+    if (node) toast('已插入组件「' + node.name + '」，拖动它摆位置');
+  },
+  removeComponent(defId) {
+    store.removeComponentDef(defId);
+    toast('已删除组件定义；页面里的实例保留，只是不再联动');
+  },
   toast
 };
 
@@ -301,6 +310,10 @@ document.querySelector('.right-actions').addEventListener('click', async (e) => 
     openTemplates();
     return;
   }
+  if (act === 'flow') {
+    openFlow();
+    return;
+  }
 });
 
 /** 载入课程作业四页示例 */
@@ -333,6 +346,21 @@ if (guideEl) {
   guideEl.addEventListener('click', (e) => {
     const t = e.target;
     if (t && t.dataset && t.dataset.act === 'preset') loadAssignmentPreset();
+  });
+}
+
+// 存为组件
+const saveComponentBtn = document.getElementById('saveComponentBtn');
+if (saveComponentBtn) {
+  saveComponentBtn.addEventListener('click', () => {
+    if (!store.state.selection.length) {
+      toast('先在画布上选中要存成组件的元素');
+      return;
+    }
+    const name = prompt('组件名称', '我的组件');
+    if (name === null) return;
+    const def = store.addComponentDef(name.trim() || '我的组件');
+    if (def) toast('已存为组件「' + def.name + '」，在左上「我的组件」里点它插入实例');
   });
 }
 
@@ -511,6 +539,24 @@ $('previewRestart').addEventListener('click', () => {
   const mask = $('previewMask');
   if (mask._runtime) mask._runtime.restart();
 });
+
+/* ---------------- 交互跳转总览 ---------------- */
+function openFlow() {
+  openModal('交互跳转总览', () => {
+    const wrap = document.createElement('div');
+    const desc = document.createElement('div');
+    desc.className = 'hint';
+    desc.textContent = describeFlow(store.project);
+    wrap.appendChild(desc);
+    const { svg } = buildFlowSvg(store.project);
+    wrap.appendChild(svg);
+    return wrap;
+  }, () => {
+    const box = document.createElement('div');
+    box.appendChild(btn('关闭', () => closeModal()));
+    return box;
+  });
+}
 
 /* ---------------- 页面模板库 ---------------- */
 function applyTemplate(tplId) {
@@ -907,6 +953,9 @@ function boot() {
   }
   if (/[?&]templates=1/.test(location.search)) {
     setTimeout(openTemplates, 80);
+  }
+  if (/[?&]flow=1/.test(location.search)) {
+    setTimeout(openFlow, 100);
   }
 
   requestAnimationFrame(() => {

@@ -235,6 +235,53 @@ export function renderLibrary(container, store, handlers, keyword) {
     return tags.some((t) => t.toLowerCase().indexOf(kw) >= 0);
   });
 
+  /* 我的组件（自定义母版）：非搜索时显示在最前 */
+  const defs = (store && store.project && store.project.components) || [];
+  if (!kw && defs.length) {
+    const title = document.createElement('div');
+    title.className = 'lib-group-title';
+    title.textContent = '我的组件';
+    container.appendChild(title);
+
+    for (const def of defs) {
+      const item = document.createElement('div');
+      item.className = 'lib-item my-comp';
+      item.title = def.name + '（点击插入实例，' + Math.round(def.w) + '×' + Math.round(def.h) + '）';
+
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('width', '20');
+      svg.setAttribute('height', '20');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '1.6');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      svg.innerHTML = LAYER_ICONS.group;
+      item.appendChild(svg);
+
+      const label = document.createElement('span');
+      label.textContent = def.name;
+      item.appendChild(label);
+
+      item.addEventListener('click', () => {
+        if (handlers.insertComponent) handlers.insertComponent(def.id);
+      });
+
+      const del = document.createElement('button');
+      del.className = 'mini comp-del';
+      del.textContent = '✕';
+      del.title = '删除这个组件定义（页面里的实例会保留，只是不再联动）';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (handlers.removeComponent) handlers.removeComponent(def.id);
+      });
+      item.appendChild(del);
+
+      container.appendChild(item);
+    }
+  }
+
   if (!list.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-hint lib-empty';

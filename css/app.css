@@ -676,6 +676,46 @@ textarea.full {
   font-size: 11px;
 }
 
+.lib-save-comp {
+  margin-top: 4px;
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.lib-save-comp:hover { color: var(--text); border-color: var(--accent); }
+
+.lib-item.my-comp { position: relative; border-color: rgba(22, 119, 255, 0.35); }
+.lib-item.my-comp .comp-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.lib-item.my-comp:hover .comp-del { opacity: 0.8; }
+
+/* ---------- 交互跳转总览 ---------- */
+.flow-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-top: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
 /* ---------- 页面模板库 ---------- */
 .tpl-grid {
   display: grid;

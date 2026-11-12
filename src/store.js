@@ -11,6 +11,17 @@ function deepClone(v) {
   return JSON.parse(JSON.stringify(v));
 }
 
+/** 深拷贝一批节点，并给每个节点重新生成 id（组件实例之间不能共享 id） */
+function cloneNodesWithNewIds(nodes) {
+  const copy = JSON.parse(JSON.stringify(nodes || []));
+  const reid = (n) => {
+    n.id = uid('n');
+    if (Array.isArray(n.children)) n.children.forEach(reid);
+  };
+  copy.forEach(reid);
+  return copy;
+}
+
 export class Store {
   constructor() {
     this.state = {
@@ -657,6 +668,115 @@ export class Store {
 
   variableById(id) {
     return this.ensureVariables().find((x) => x.id === id) || null;
+  }
+
+  /* ---------- 自定义组件（母版 + 实例） ---------- */
+  ensureComponents() {
+    if (!Array.isArray(this.project.components)) this.project.components = [];
+    return this.project.components;
+  }
+
+  componentDefById(id) {
+    return this.ensureComponents().find((d) => d.id === id) || null;
+  }
+
+  /** 把选中元素存成母版 */
+  addComponentDef(name) {
+    const nodes = this.selectedNodes;
+    if (!nodes.length) return null;
+    const b = this.selectionBounds();
+    const children = cloneNodesWithNewIds(nodes).map((c, i) => {
+      c.x = Math.round(nodes[i].x - b.x);
+      c.y = Math.round(nodes[i].y - b.y);
+      return c;
+    });
+    const def = {
+      id: uid('c'),
+      name: name || ('组件 ' + (this.ensureComponents().length + 1)),
+      w: Math.max(1, Math.round(b.w)),
+      h: Math.max(1, Math.round(b.h)),
+      children,
+      createdAt: Date.now()
+    };
+    this.mutate(() => { this.ensureComponents().push(def); }, { reason: 'component' });
+    return def;
+  }
+
+  /** 在当前页插入一个实例（分组，带 masterId） */
+  insertComponentInstance(defId, x, y) {
+    const def = this.componentDefById(defId);
+    if (!def) return null;
+    const node = {
+      id: uid('g'),
+      type: 'group',
+      name: def.name,
+      x: x == null ? 40 : Math.round(x),
+      y: y == null ? 120 : Math.round(y),
+      w: def.w,
+      h: def.h,
+      rotation: 0,
+      opacity: 1,
+      hidden: false,
+      locked: false,
+      states: null,
+      activeStateId: null,
+      overlay: false,
+      overlayMask: true,
+      defaultOpen: false,
+      link: null,
+      masterId: def.id,
+      children: cloneNodesWithNewIds(def.children)
+    };
+    this.mutate(() => {
+      this.page.nodes.push(node);
+      this.state.selection = [node.id];
+    }, { reason: 'add' });
+    return node;
+  }
+
+  /** 母版改动同步到所有实例（跨页面） */
+  syncInstances(defId) {
+    const def = this.componentDefById(defId);
+    if (!def) return 0;
+    let count = 0;
+    this.mutate(() => {
+      for (const page of this.project.pages) {
+        for (const n of page.nodes) {
+          if (n.masterId === defId && n.type === 'group') {
+            n.children = cloneNodesWithNewIds(def.children);
+            n.w = def.w;
+            n.h = def.h;
+            count += 1;
+          }
+        }
+      }
+    }, { reason: 'sync' });
+    return count;
+  }
+
+  /** 用某个实例的内容反哺母版，并同步其它实例 */
+  updateDefFromInstance(nodeId) {
+    const node = this.nodeById(nodeId);
+    if (!node || !node.masterId) return 0;
+    const def = this.componentDefById(node.masterId);
+    if (!def) return 0;
+    this.mutate(() => {
+      def.children = JSON.parse(JSON.stringify(node.children || []));
+      def.w = node.w;
+      def.h = node.h;
+    }, { reason: 'component' });
+    return this.syncInstances(node.masterId);
+  }
+
+  removeComponentDef(defId) {
+    this.mutate(() => {
+      this.project.components = this.ensureComponents().filter((d) => d.id !== defId);
+      for (const page of this.project.pages) {
+        for (const n of page.nodes) {
+          if (n.masterId === defId) delete n.masterId;
+        }
+      }
+    }, { reason: 'component' });
   }
 
   setPageBg(color) {
