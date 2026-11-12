@@ -351,6 +351,8 @@ function baseNode(type, device) {
     align: 'left',
     verticalAlign: 'center',
     lineHeight: 1.4,
+    letterSpacing: 0,
+    maxLines: 0,
     paddingX: 0,
     src: '',
     locked: false,

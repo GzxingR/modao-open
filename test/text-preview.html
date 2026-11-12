@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>text options preview</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>body{background:#0b0d10;margin:0;padding:20px;font-family:"Microsoft YaHei",sans-serif;}</style>
+</head>
+<body>
+<div id="host" style="width:402px;background:#fff;border-radius:12px;overflow:hidden;"></div>
+<script type="module">
+import { renderPage } from '../src/nodes.js';
+import { createProject, createNode, getDevice } from '../src/model.js';
+
+const dev = getDevice('iphone17');
+const project = createProject('文字选项');
+const page = project.pages[0];
+page.deviceId = 'iphone17';
+
+const LONG = '这是一段很长很长的文字，用来演示单行省略号和多行截断的效果，后面还有更多内容继续写下去。再补一句让内容真的超过三行，这样多行截断才会在第三行末尾显示省略号，而不是被容器高度硬裁掉。';
+
+page.nodes = [
+  createNode('text', dev, { x: 16, y: 24, w: 370, h: 22, text: '单行省略（行数上限 = 1）', fontSize: 12, color: '#8a8f99' }),
+  createNode('text', dev, { x: 16, y: 50, w: 370, h: 26, text: LONG, maxLines: 1, fontSize: 15 }),
+  createNode('text', dev, { x: 16, y: 100, w: 370, h: 22, text: '多行截断（行数上限 = 3）', fontSize: 12, color: '#8a8f99' }),
+  createNode('text', dev, { x: 16, y: 126, w: 370, h: 76, text: LONG, maxLines: 3, fontSize: 15, lineHeight: 1.6 }),
+  createNode('text', dev, { x: 16, y: 220, w: 370, h: 22, text: '不截断 + 字距 2px', fontSize: 12, color: '#8a8f99' }),
+  createNode('text', dev, { x: 16, y: 246, w: 370, h: 70, text: '这几个字的字距被拉开了。', maxLines: 0, letterSpacing: 2, fontSize: 15 })
+];
+
+const hostEl = document.getElementById('host');
+const rendered = renderPage(page, { device: dev });
+rendered.style.width = dev.w + 'px';
+rendered.style.height = '420px';
+hostEl.appendChild(rendered);
+document.title = 'text opts ready';
+</script>
+</body>
+</html>

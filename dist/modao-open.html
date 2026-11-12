@@ -1416,6 +1416,8 @@ function baseNode(type, device) {
     align: 'left',
     verticalAlign: 'center',
     lineHeight: 1.4,
+    letterSpacing: 0,
+    maxLines: 0,
     paddingX: 0,
     src: '',
     locked: false,
@@ -3277,6 +3279,7 @@ function baseNodeStyle(node) {
     fontSize: px(node.fontSize || 16),
     fontWeight: String(node.fontWeight || 400),
     lineHeight: String(node.lineHeight || 1.4),
+    letterSpacing: node.letterSpacing ? px(node.letterSpacing) : 'normal',
     textAlign: node.align || 'left',
     transform: node.rotation ? 'rotate(' + node.rotation + 'deg)' : 'none'
   };
@@ -3309,13 +3312,37 @@ function createNodeEl(node, opts = {}) {
   switch (node.type) {
     case 'text': {
       const pad = node.paddingX || 0;
+      const maxLines = Number(node.maxLines) || 0;
       el.style.padding = '0 ' + px(pad);
-      el.style.display = 'flex';
-      el.style.alignItems = node.verticalAlign === 'top' ? 'flex-start' : 'center';
-      el.style.justifyContent = node.align === 'center' ? 'center' : (node.align === 'right' ? 'flex-end' : 'flex-start');
       el.style.whiteSpace = 'pre-wrap';
       el.style.wordBreak = 'break-word';
-      el.textContent = node.text || '';
+      el.style.alignItems = node.verticalAlign === 'top' ? 'flex-start' : 'center';
+      el.style.justifyContent = node.align === 'center' ? 'center' : (node.align === 'right' ? 'flex-end' : 'flex-start');
+
+      if (maxLines === 1) {
+        // 单行截断：flex 里放一个可收缩的内层，才能正确出省略号
+        el.style.display = 'flex';
+        el.textContent = '';
+        const span = document.createElement('span');
+        span.className = 'text-clamp';
+        span.textContent = node.text || '';
+        span.style.whiteSpace = 'nowrap';
+        span.style.overflow = 'hidden';
+        span.style.textOverflow = 'ellipsis';
+        span.style.minWidth = '0';
+        span.style.maxWidth = '100%';
+        el.appendChild(span);
+      } else if (maxLines > 1) {
+        // 多行截断
+        el.style.display = '-webkit-box';
+        el.style.webkitBoxOrient = 'vertical';
+        el.style.webkitLineClamp = String(maxLines);
+        el.style.overflow = 'hidden';
+        el.textContent = node.text || '';
+      } else {
+        el.style.display = 'flex';
+        el.textContent = node.text || '';
+      }
       break;
     }
     case 'rect':
@@ -4718,6 +4745,11 @@ function renderInspector(container, store, handlers) {
         numField('字号', node.fontSize || 16, (v) => handlers.update(node.id, { fontSize: v }), { min: 1 }),
         numField('行高', node.lineHeight || 1.4, (v) => handlers.update(node.id, { lineHeight: v }), { step: '0.1', min: 0.8 })
       ]),
+      el('div', { class: 'row' }, [
+        numField('字距', node.letterSpacing || 0, (v) => handlers.update(node.id, { letterSpacing: v }), { step: '0.5', min: -5, max: 20 }),
+        numField('行数上限', node.maxLines || 0, (v) => handlers.update(node.id, { maxLines: v }), { min: 0, max: 20 })
+      ]),
+      el('div', { class: 'empty-hint', text: '行数上限填 0 = 不截断；填 1 = 单行省略号；填 N = 超过 N 行省略。' }),
       el('div', { class: 'row' }, [
         colorField('颜色', isHexish(node.color) ? node.color : '#222222', (v) => handlers.update(node.id, { color: v }))
       ]),

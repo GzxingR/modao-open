@@ -43,6 +43,7 @@ export function baseNodeStyle(node) {
     fontSize: px(node.fontSize || 16),
     fontWeight: String(node.fontWeight || 400),
     lineHeight: String(node.lineHeight || 1.4),
+    letterSpacing: node.letterSpacing ? px(node.letterSpacing) : 'normal',
     textAlign: node.align || 'left',
     transform: node.rotation ? 'rotate(' + node.rotation + 'deg)' : 'none'
   };
@@ -75,13 +76,37 @@ export function createNodeEl(node, opts = {}) {
   switch (node.type) {
     case 'text': {
       const pad = node.paddingX || 0;
+      const maxLines = Number(node.maxLines) || 0;
       el.style.padding = '0 ' + px(pad);
-      el.style.display = 'flex';
-      el.style.alignItems = node.verticalAlign === 'top' ? 'flex-start' : 'center';
-      el.style.justifyContent = node.align === 'center' ? 'center' : (node.align === 'right' ? 'flex-end' : 'flex-start');
       el.style.whiteSpace = 'pre-wrap';
       el.style.wordBreak = 'break-word';
-      el.textContent = node.text || '';
+      el.style.alignItems = node.verticalAlign === 'top' ? 'flex-start' : 'center';
+      el.style.justifyContent = node.align === 'center' ? 'center' : (node.align === 'right' ? 'flex-end' : 'flex-start');
+
+      if (maxLines === 1) {
+        // 单行截断：flex 里放一个可收缩的内层，才能正确出省略号
+        el.style.display = 'flex';
+        el.textContent = '';
+        const span = document.createElement('span');
+        span.className = 'text-clamp';
+        span.textContent = node.text || '';
+        span.style.whiteSpace = 'nowrap';
+        span.style.overflow = 'hidden';
+        span.style.textOverflow = 'ellipsis';
+        span.style.minWidth = '0';
+        span.style.maxWidth = '100%';
+        el.appendChild(span);
+      } else if (maxLines > 1) {
+        // 多行截断
+        el.style.display = '-webkit-box';
+        el.style.webkitBoxOrient = 'vertical';
+        el.style.webkitLineClamp = String(maxLines);
+        el.style.overflow = 'hidden';
+        el.textContent = node.text || '';
+      } else {
+        el.style.display = 'flex';
+        el.textContent = node.text || '';
+      }
       break;
     }
     case 'rect':

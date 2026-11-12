@@ -284,6 +284,11 @@ export function renderInspector(container, store, handlers) {
         numField('行高', node.lineHeight || 1.4, (v) => handlers.update(node.id, { lineHeight: v }), { step: '0.1', min: 0.8 })
       ]),
       el('div', { class: 'row' }, [
+        numField('字距', node.letterSpacing || 0, (v) => handlers.update(node.id, { letterSpacing: v }), { step: '0.5', min: -5, max: 20 }),
+        numField('行数上限', node.maxLines || 0, (v) => handlers.update(node.id, { maxLines: v }), { min: 0, max: 20 })
+      ]),
+      el('div', { class: 'empty-hint', text: '行数上限填 0 = 不截断；填 1 = 单行省略号；填 N = 超过 N 行省略。' }),
+      el('div', { class: 'row' }, [
         colorField('颜色', isHexish(node.color) ? node.color : '#222222', (v) => handlers.update(node.id, { color: v }))
       ]),
       el('div', { class: 'row' }, [
