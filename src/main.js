@@ -8,7 +8,7 @@ import { createCanvas } from './canvas.js';
 import { renderPageList, renderLibrary, renderLayerList } from './library.js';
 import { renderInspector } from './inspector.js';
 import { renderLinks, createPreviewRuntime } from './links.js';
-import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, buildSpecText, buildNodeSpecText, exportNodePNG } from './io.js';
+import { exportPagePNG, exportAllPagesPNG, exportProjectJSON, readProjectFile, buildSpecText, buildNodeSpecText, exportNodePNG, exportIconSVG } from './io.js';
 import { renderAIPanel, generatePage } from './ai.js';
 import { buildStandaloneHtml, downloadStandaloneHtml } from './exportHtml.js';
 import { downloadProjectPDF } from './pdf.js';
@@ -651,6 +651,18 @@ function openExportMenu() {
           await new Promise((r) => setTimeout(r, 220));
         }
         toast('已导出 ' + nodes.length + ' 张元素切图');
+      }
+    },
+    {
+      label: '当前页所有图标 → SVG',
+      desc: '把本页图标导出成矢量 SVG（单 path，可再编辑），适合交「图标切图」',
+      run: () => {
+        const icons = store.page.nodes.filter((n) => n.type === 'icon' && !n.hidden);
+        if (!icons.length) { toast('本页没有图标元素'); return; }
+        icons.forEach((n, i) => {
+          setTimeout(() => { exportIconSVG(n, store.project.name); }, i * 260);
+        });
+        toast('正在导出 ' + icons.length + ' 个图标 SVG');
       }
     },
     {

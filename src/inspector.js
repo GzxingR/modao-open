@@ -2,7 +2,7 @@
  * 右侧属性面板
  */
 
-import { ICON_NAMES, ICONS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice, TRIGGERS, ACTIONS, CONDITION_OPS } from './model.js';
+import { ICON_NAMES, ICONS, ICON_GROUPS, DEVICES, currentState, STATE_STYLE_KEYS, resolveDevice, TRIGGERS, ACTIONS, CONDITION_OPS } from './model.js';
 import { compressImageFile } from './io.js';
 
 function el(tag, props = {}, children = []) {
@@ -345,15 +345,39 @@ export function renderInspector(container, store, handlers) {
   }
 
   if (node.type === 'icon') {
-    const select = el('select');
-    for (const name of ICON_NAMES) {
-      const o = el('option', { value: name, text: name });
-      if (name === (node.icon || 'heart')) o.selected = true;
-      select.appendChild(o);
+    const picker = el('div', { class: 'icon-picker' });
+    for (const groupName of Object.keys(ICON_GROUPS)) {
+      const names = ICON_GROUPS[groupName].filter((n) => ICONS[n]);
+      if (!names.length) continue;
+      picker.appendChild(el('div', { class: 'icon-group-title', text: groupName }));
+      const grid = el('div', { class: 'icon-grid' });
+      for (const name of names) {
+        const btn = el('button', {
+          class: 'icon-cell' + ((node.icon || 'heart') === name ? ' on' : ''),
+          title: name
+        });
+        btn.setAttribute('aria-label', name);
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '16');
+        svg.setAttribute('height', '16');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '1.7');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', ICONS[name]);
+        svg.appendChild(p);
+        btn.appendChild(svg);
+        btn.addEventListener('click', () => handlers.update(node.id, { icon: name }));
+        grid.appendChild(btn);
+      }
+      picker.appendChild(grid);
     }
-    select.addEventListener('change', () => handlers.update(node.id, { icon: select.value }));
-    specific.push(el('div', { class: 'row' }, [select]));
+    specific.push(picker);
     specific.push(el('div', { class: 'row' }, [numField('线宽', node.strokeWidth || 1.7, (v) => handlers.update(node.id, { strokeWidth: v }), { step: '0.1', min: 0.5 })]));
+    specific.push(el('div', { class: 'empty-hint', text: '共 ' + ICON_NAMES.length + ' 个图标，可用「导出 → 当前元素切图」拿到 PNG，或在导出菜单里选 SVG。' }));
   }
 
   if (node.type === 'checkbox') {

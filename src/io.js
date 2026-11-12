@@ -3,7 +3,7 @@
  */
 
 import { renderPage, createNodeEl } from './nodes.js';
-import { getDevice, resolveDevice } from './model.js';
+import { getDevice, resolveDevice, ICONS } from './model.js';
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -16,6 +16,31 @@ function downloadBlob(blob, filename) {
 
 function safeName(s) {
   return String(s || 'prototype').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60);
+}
+
+/**
+ * 图标 → 真矢量 SVG 文本（单 path，可再编辑）
+ */
+export function buildIconSvgText(node) {
+  const d = ICONS[node.icon] || ICONS.heart;
+  const w = Math.max(8, Math.round(node.w || 24));
+  const h = Math.max(8, Math.round(node.h || 24));
+  const color = node.color || '#333333';
+  const sw = node.strokeWidth || 1.7;
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="' + color + '" stroke-width="' + sw + '" '
+    + 'stroke-linecap="round" stroke-linejoin="round">\n'
+    + '  <path d="' + d + '"/>\n'
+    + '</svg>\n';
+}
+
+/** 导出图标为 .svg 文件，返回文本长度 */
+export function exportIconSVG(node, projectName) {
+  const text = buildIconSvgText(node);
+  const filename = safeName(projectName) + '-' + safeName(node.icon || 'icon') + '.svg';
+  downloadBlob(new Blob([text], { type: 'image/svg+xml;charset=utf-8' }), filename);
+  return text.length;
 }
 
 /**

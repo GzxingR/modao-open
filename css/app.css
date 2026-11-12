@@ -676,6 +676,46 @@ textarea.full {
   font-size: 11px;
 }
 
+/* ---------- 图标选择器 ---------- */
+.icon-picker {
+  max-height: 230px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--bg-input);
+}
+.icon-group-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 5px 0 3px;
+  letter-spacing: .04em;
+}
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.icon-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+}
+.icon-cell:hover { background: var(--bg-panel-2); color: var(--text); }
+.icon-cell.on {
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+  background: var(--accent-soft);
+}
+
 /* ---------- 错误提示条 ---------- */
 .error-bar {
   position: fixed;

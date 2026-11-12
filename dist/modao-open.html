@@ -683,6 +683,46 @@ textarea.full {
   font-size: 11px;
 }
 
+/* ---------- 图标选择器 ---------- */
+.icon-picker {
+  max-height: 230px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--bg-input);
+}
+.icon-group-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 5px 0 3px;
+  letter-spacing: .04em;
+}
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.icon-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+}
+.icon-cell:hover { background: var(--bg-panel-2); color: var(--text); }
+.icon-cell.on {
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+  background: var(--accent-soft);
+}
+
 /* ---------- 错误提示条 ---------- */
 .error-bar {
   position: fixed;
@@ -1051,6 +1091,84 @@ function uid(prefix = 'n') {
 
 /** 图标库：24x24 viewBox 的 path，便于画布和组件库复用 */
 const ICONS = {
+  // —— 界面 ——
+  settings: 'M12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6zM12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6L18 18M18 6l-1.4 1.4M7.4 16.6L6 18',
+  more: 'M6 12h.01M12 12h.01M18 12h.01',
+  filter: 'M4 5h16l-6 7.5V19l-4-2v-4.5L4 5z',
+  sort: 'M7 4v14M4 15l3 3 3-3M17 20V6M14 9l3-3 3 3',
+  refresh: 'M4.5 12a7.5 7.5 0 0 1 12.8-5.3M19.5 12a7.5 7.5 0 0 1-12.8 5.3M17 3v4h-4M7 21v-4h4',
+  logout: 'M9 4.5H5.5v15H9M15 8l4 4-4 4M19 12H9',
+  login: 'M9 4.5h5.5v15H9M4 12l4-4M4 12l4 4M4 12h10',
+  eye: 'M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12zM12 9.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z',
+  eyeOff: 'M4 4l16 16M9.8 5.6A9.6 9.6 0 0 1 12 5.4c6 0 9.5 6.6 9.5 6.6a17 17 0 0 1-3 3.6M6.4 7.4C3.9 9.2 2.5 12 2.5 12s3.5 5.5 9.5 5.5c1.3 0 2.5-.3 3.6-.7',
+  lock: 'M6.5 11h11v9h-11zM9 11V8a3 3 0 0 1 6 0v3',
+  unlock: 'M6.5 11h11v9h-11zM9 11V8a3 3 0 0 1 5.6-1.5',
+  info: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 11v5M12 8h.01',
+  warning: 'M12 3.8l9 16H3l9-16zM12 9.5v4.5M12 17h.01',
+  success: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM8 12.3l2.8 2.8L16 9.6',
+  errorCircle: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9 9l6 6M15 9l-6 6',
+  help: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9.5 9.4a2.6 2.6 0 1 1 3.6 2.4c-.8.3-1.1.9-1.1 1.8M12 17.3h.01',
+
+  // —— 导航 ——
+  chevronLeft: 'M14.5 6l-6 6 6 6',
+  chevronRight: 'M9.5 6l6 6-6 6',
+  chevronUp: 'M6 14.5l6-6 6 6',
+  chevronDown: 'M6 9.5l6 6 6-6',
+  arrowUp: 'M12 19V6M6.5 11L12 5.5 17.5 11',
+  arrowDown: 'M12 5v13M6.5 13l5.5 5.5L17.5 13',
+  grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  list: 'M4 7h16M4 12h16M4 17h10',
+  layout: 'M4 5h16v14H4zM4 10h16M10 10v9',
+
+  // —— 媒体 ——
+  camera: 'M4 8h3l1.5-2h7L17 8h3v11H4zM12 10.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z',
+  image: 'M4 6h16v12H4zM7 15l3-3 2.5 2.5L15 12l2 3M8.5 9.5h.01',
+  video: 'M4 7h11v10H4zM15 11l5-3v8l-5-3',
+  play: 'M9 6.5l9 5.5-9 5.5z',
+  pause: 'M9 6v12M15 6v12',
+  mic: 'M12 4a2.5 2.5 0 0 0-2.5 2.5v5a2.5 2.5 0 0 0 5 0v-5A2.5 2.5 0 0 0 12 4zM6 12a6 6 0 0 0 12 0M12 18v3',
+  music: 'M9 18V6l10-2v12M9 18a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zM19 16a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z',
+
+  // —— 通讯 ——
+  mail: 'M3.5 6h17v12h-17zM3.5 6.5l8.5 7 8.5-7',
+  phone: 'M7 3.5h3l1.5 4-2 1.5a11 11 0 0 0 5.5 5.5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 5 5.5a2 2 0 0 1 2-2z',
+  chat: 'M4 5h16v11H9l-5 4z',
+  share: 'M18 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM6 15a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM8.2 11.2l7.6-3.4M8.2 12.8l7.6 3.4',
+  link: 'M10 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7L11 6.8M14 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7L13 17.2',
+
+  // —— 商业 ——
+  bag: 'M5 8h14l-1 12H6L5 8zM9 8V6a3 3 0 0 1 6 0v2',
+  gift: 'M3.5 11h17v9h-17zM3.5 11V8h17v3M12 8v12M12 8c-1-3-5-3-5-.5S12 8 12 8zM12 8c1-3 5-3 5-.5S12 8 12 8z',
+  tag: 'M4 4h8l8 8-8 8-8-8zM8.5 8.5h.01',
+  coupon: 'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4zM9 6v12',
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z',
+  barcode: 'M4 5v14M7 5v14M10 5v10M13 5v14M16 5v10M20 5v14',
+  card: 'M3 6h18v12H3zM3 10h18M6.5 14.5h3',
+
+  // —— 位置与时间 ——
+  map: 'M9 4l-6 2.5v13L9 17l6 2 6-2.5v-13L15 6zM9 4v13M15 6v13',
+  location: 'M12 21s6.5-6 6.5-11a6.5 6.5 0 1 0-13 0C5.5 15 12 21 12 21zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  calendar: 'M4 6.5h16v14H4zM4 10.5h16M8.5 4v4M15.5 4v4',
+  clock: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5V12l3 2',
+
+  // —— 系统 ——
+  download: 'M12 4v11M7.5 11L12 15.5 16.5 11M4.5 19.5h15',
+  upload: 'M12 16V5M7.5 9.5L12 5l4.5 4.5M4.5 19.5h15',
+  trash: 'M4.5 7h15M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5',
+  edit: 'M4 20h4l10-10-4-4L4 16zM14.5 5.5l4 4',
+  copy: 'M8 8h11v11H8zM5 16V5h11',
+  save: 'M4 4h12l4 4v12H4zM8 4v6h8V4M8 20v-6h8v6',
+  wifi: 'M3 9a14 14 0 0 1 18 0M6.5 12.5a9 9 0 0 1 11 0M10 16a4 4 0 0 1 4 0M12 19.5h.01',
+  bluetooth: 'M12 3v18l5-4.5-10-7 10-7L12 7',
+  battery: 'M3 8h15v8H3zM20 11v2M6 11v2M9 11v2',
+  cloud: 'M7 18a4 4 0 0 1 .6-8 5.5 5.5 0 0 1 10.4 1.6A3.5 3.5 0 0 1 17.5 18z',
+  folder: 'M3.5 6h6l2 2.5h9V18h-17z',
+  doc: 'M6 3.5h8l4 4V20H6zM14 3.5V8h4M9 12h6M9 15.5h6',
+  chart: 'M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6',
+  sun: 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4',
+  moon: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z',
+
+  // —— 原有 ——
   heart: 'M12 21s-7.5-4.7-9.3-9.1C1.2 8.3 3 5 6.2 5c3 0 4.4 2 5.8 3.7C13.4 7 14.8 5 17.8 5 21 5 22.8 8.3 21.3 11.9 19.5 16.3 12 21 12 21z',
   star: 'M12 3.2l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.6l-5.3 2.8 1.1-5.9L3.5 9.4l5.9-.8L12 3.2z',
   plus: 'M12 4.5v15M4.5 12h15',
@@ -1066,6 +1184,17 @@ const ICONS = {
   bell: 'M12 4a5 5 0 0 0-5 5v3.5L5.5 16h13L17 12.5V9a5 5 0 0 0-5-5zm-2 14a2 2 0 0 0 4 0',
   wallet: 'M3.5 7.5h17v11h-17zM3.5 7.5l2.2-3h12.6l2.2 3M16 13h2',
   dot: 'M12 12m-4 0a4 4 0 1 0 8 0 4 4 0 1 0 -8 0'
+};
+
+/** 图标分类，供面板分组显示 */
+const ICON_GROUPS = {
+  界面: ['settings', 'more', 'filter', 'sort', 'refresh', 'logout', 'login', 'eye', 'eyeOff', 'lock', 'unlock', 'info', 'warning', 'success', 'errorCircle', 'help'],
+  导航: ['chevronLeft', 'chevronRight', 'chevronUp', 'chevronDown', 'arrowLeft', 'arrowRight', 'arrowUp', 'arrowDown', 'grid', 'list', 'layout', 'menu', 'home'],
+  媒体: ['camera', 'image', 'video', 'play', 'pause', 'mic', 'music'],
+  通讯: ['mail', 'phone', 'chat', 'share', 'link', 'bell', 'user'],
+  商业: ['bag', 'gift', 'tag', 'coupon', 'qr', 'barcode', 'card', 'cart', 'wallet', 'star', 'heart'],
+  位置时间: ['map', 'location', 'calendar', 'clock'],
+  系统: ['download', 'upload', 'trash', 'edit', 'copy', 'save', 'wifi', 'bluetooth', 'battery', 'cloud', 'folder', 'doc', 'chart', 'sun', 'moon', 'plus', 'check', 'close', 'search', 'dot']
 };
 
 const ICON_NAMES = Object.keys(ICONS);
@@ -4051,15 +4180,39 @@ function renderInspector(container, store, handlers) {
   }
 
   if (node.type === 'icon') {
-    const select = el('select');
-    for (const name of ICON_NAMES) {
-      const o = el('option', { value: name, text: name });
-      if (name === (node.icon || 'heart')) o.selected = true;
-      select.appendChild(o);
+    const picker = el('div', { class: 'icon-picker' });
+    for (const groupName of Object.keys(ICON_GROUPS)) {
+      const names = ICON_GROUPS[groupName].filter((n) => ICONS[n]);
+      if (!names.length) continue;
+      picker.appendChild(el('div', { class: 'icon-group-title', text: groupName }));
+      const grid = el('div', { class: 'icon-grid' });
+      for (const name of names) {
+        const btn = el('button', {
+          class: 'icon-cell' + ((node.icon || 'heart') === name ? ' on' : ''),
+          title: name
+        });
+        btn.setAttribute('aria-label', name);
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '16');
+        svg.setAttribute('height', '16');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '1.7');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', ICONS[name]);
+        svg.appendChild(p);
+        btn.appendChild(svg);
+        btn.addEventListener('click', () => handlers.update(node.id, { icon: name }));
+        grid.appendChild(btn);
+      }
+      picker.appendChild(grid);
     }
-    select.addEventListener('change', () => handlers.update(node.id, { icon: select.value }));
-    specific.push(el('div', { class: 'row' }, [select]));
+    specific.push(picker);
     specific.push(el('div', { class: 'row' }, [numField('线宽', node.strokeWidth || 1.7, (v) => handlers.update(node.id, { strokeWidth: v }), { step: '0.1', min: 0.5 })]));
+    specific.push(el('div', { class: 'empty-hint', text: '共 ' + ICON_NAMES.length + ' 个图标，可用「导出 → 当前元素切图」拿到 PNG，或在导出菜单里选 SVG。' }));
   }
 
   if (node.type === 'checkbox') {
@@ -4967,6 +5120,31 @@ function downloadBlob(blob, filename) {
 
 function safeName(s) {
   return String(s || 'prototype').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60);
+}
+
+/**
+ * 图标 → 真矢量 SVG 文本（单 path，可再编辑）
+ */
+function buildIconSvgText(node) {
+  const d = ICONS[node.icon] || ICONS.heart;
+  const w = Math.max(8, Math.round(node.w || 24));
+  const h = Math.max(8, Math.round(node.h || 24));
+  const color = node.color || '#333333';
+  const sw = node.strokeWidth || 1.7;
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="' + color + '" stroke-width="' + sw + '" '
+    + 'stroke-linecap="round" stroke-linejoin="round">\n'
+    + '  <path d="' + d + '"/>\n'
+    + '</svg>\n';
+}
+
+/** 导出图标为 .svg 文件，返回文本长度 */
+function exportIconSVG(node, projectName) {
+  const text = buildIconSvgText(node);
+  const filename = safeName(projectName) + '-' + safeName(node.icon || 'icon') + '.svg';
+  downloadBlob(new Blob([text], { type: 'image/svg+xml;charset=utf-8' }), filename);
+  return text.length;
 }
 
 /**
@@ -6697,6 +6875,18 @@ function openExportMenu() {
           await new Promise((r) => setTimeout(r, 220));
         }
         toast('已导出 ' + nodes.length + ' 张元素切图');
+      }
+    },
+    {
+      label: '当前页所有图标 → SVG',
+      desc: '把本页图标导出成矢量 SVG（单 path，可再编辑），适合交「图标切图」',
+      run: () => {
+        const icons = store.page.nodes.filter((n) => n.type === 'icon' && !n.hidden);
+        if (!icons.length) { toast('本页没有图标元素'); return; }
+        icons.forEach((n, i) => {
+          setTimeout(() => { exportIconSVG(n, store.project.name); }, i * 260);
+        });
+        toast('正在导出 ' + icons.length + ' 个图标 SVG');
       }
     },
     {
